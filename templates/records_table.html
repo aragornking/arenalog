@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %} 2v2 {% endblock %}
+
+{% block content %}
+<table class="table table-hover">
+{% for item in data %}
+<tr>
+  <td class='normal' valign='top'><strong>{{loop.index}}</strong></td>
+  {% for record in item %}
+    <td class='normal' valign='top'>{{record}}</td>
+  {% endfor %}
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

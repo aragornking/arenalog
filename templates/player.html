@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %} REPORT | www.wwfx.net {% endblock %}
+{% block title %}Player{% endblock %}
+
+{% block hero %}
+<h2>None vs None</h2>
+{% endblock %}
 
 {% block content %}
-<table border=1>
-{% for item in items %}
-<tr>
-  <td class='normal' valign='top'><strong>{{loop.index}}</strong></td>
-  {% for record in item %}
-    <td class='normal' valign='top'>{{record}}</td>
-  {% endfor %}
-</tr>
-{% endfor %}
-</table>
+<div class="player">
+    <canvas id="arena-player"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="js/player.js"></script>
 {% endblock %}

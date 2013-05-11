@@ -9,9 +9,8 @@
 {% endblock %}
 
 {% block hero %}
-<h2>
-  {{data.bracket}}v{{data.bracket}}
-</h2>
+<h2>You are currently viewing {{data.bracket}}v{{data.bracket}} battles.</h2>
+<p>The best rating so far... <strong>{{data.best}}</strong></p>
 {% endblock %}
 
 {% block content %}
@@ -28,11 +27,30 @@
       <tbody>
         {% for item in data.rows %}
         <tr>
-          {% for record in item %}
-          <td>
-            {{record}}
-          </td>
-          {% endfor %}
+            <td>{{item.bdate}}</td>
+            <td>{{item.bmap}}</td>
+
+            <td>
+            {% for class in item.r_comp %}
+                <img src="img/icons/18/class_{{class}}.jpg" class="img-polaroid">
+            {% endfor %}
+            </td>
+
+            <td>{{item.r_rating}}</td>
+            <td>{{item.r_mmr}}</td>
+            <td>
+            {% for class in item.b_comp %}
+                <img src="img/icons/18/class_{{class}}.jpg" class="img-polaroid">
+            {% endfor %}
+            </td>
+            <td>{{item.b_rating}}</td>
+            <td>{{item.b_mmr}}</td>
+            <td>{{item.duration}}</td>
+            {% if item.bresult|int %}
+                <td><a class="btn btn-mini" type="button" href="player.html?id={{item.bid}}">Replay &raquo;</a></td>
+            {% else %}
+                <td><a class="btn btn-mini btn-inverse" type="button" href="player.html?id={{item.bid}}">Replay &raquo;</a></td>
+            {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -40,8 +58,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="js/jquery.dataTables.min.js">
-</script>
+<script src="js/jquery.dataTables.min.js"> </script>
 <script type="text/javascript" charset="utf-8">
   /* Set the defaults for DataTables initialisation */
     $.extend( true, $.fn.dataTable.defaults, {

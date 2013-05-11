@@ -18,7 +18,7 @@ def build_tables(db):
     c.executemany('''INSERT OR IGNORE INTO map (id, name) VALUES   (?, ?)''', map_)
 
     # class
-    class_ = ((1, 'WARRIOR', 'C69B6D'), (2, 'PALADIN', 'F48CBA'), (3, 'HUNTER', 'AAD372'), (4, 'ROGUE', 'FFF468'), (5, 'PRIEST', 'FFFFFF'), (6, 'DEATH KNIGHT', 'C41E3A'), (7, 'SHAMAN', '0070DD'), (8, 'MAGE', '68CCEF'), (9, 'WARLOCK', '9482C9'), (10, 'MONK', '00FF96'), (11, 'DRUID', 'FF7C0A'))
+    class_ = ((1, 'Warrior', 'C69B6D'), (2, 'Paladin', 'F48CBA'), (3, 'Hunter', 'AAD372'), (4, 'Rogue', 'FFF468'), (5, 'Priest', 'FFFFFF'), (6, 'Death Knight', 'C41E3A'), (7, 'Shaman', '0070DD'), (8, 'Mage', '68CCEF'), (9, 'Warlock', '9482C9'), (10, 'Monk', '00FF96'), (11, 'Druid', 'FF7C0A'))
     c.execute('''CREATE TABLE IF NOT EXISTS class ("id" INTEGER PRIMARY KEY UNIQUE, "name" TEXT NOT NULL, "color" TEXT NOT NULL)''')
     c.executemany('''INSERT OR IGNORE INTO class (id, name, color) VALUES   (?, ?, ?)''', class_)
 
@@ -34,10 +34,13 @@ def build_tables(db):
                                                        "name" TEXT NOT NULL UNIQUE)''')
 
     # team<->player
-    c.execute('''CREATE TABLE IF NOT EXISTS team_player ( "player_id" INTEGER NOT NULL,
-                                                          "team_id" INTEGER NOT NULL,
-                                                          FOREIGN KEY(player_id) REFERENCES player(id) ON DELETE CASCADE,
-                                                          FOREIGN KEY(team_id) REFERENCES team(id) ON DELETE CASCADE)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS team_player_battle (  "id" INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE,
+                                                                  "player_id" INTEGER NOT NULL,
+                                                                  "team_id" INTEGER NOT NULL,
+                                                                  "battle_id" INTEGER NOT NULL,
+                                                                  FOREIGN KEY(player_id) REFERENCES player(id) ON DELETE CASCADE,
+                                                                  FOREIGN KEY(team_id) REFERENCES team(id) ON DELETE CASCADE,
+                                                                  FOREIGN KEY(battle_id) REFERENCES battle(id) ON DELETE CASCADE)''')
     # battle
     c.execute('''CREATE TABLE IF NOT EXISTS battle (   "id" INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, 
                                                         "map" INTEGER NOT NULL DEFAULT 0, 
@@ -76,6 +79,10 @@ def update_data(db, directory, datafile):
                 elapsed = battle.get('elapsed')
                 bracket = battle.get('bracket')
                 date = time_to_sql(battle.get('startTime'))
+
+                # filter invalid data
+                if elapsed <= 0 or bracket not in (2,3,5):
+                    continue
 
                 red = teams.get('0')
                 blue = teams.get('1')
@@ -117,6 +124,12 @@ def update_data(db, directory, datafile):
                             c.execute('''INSERT INTO team (id, name) VALUES (NULL, ?)''', (blue_name,))
                             blue_id = c.lastrowid
 
+                        # insert battle
+                        c.execute('''INSERT INTO battle (id, map, elapsed, bracket, date, red_id, blue_id, result, red_mmr, red_rating, blue_mmr, blue_rating)
+                                                    VALUES ( NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                            (map_, elapsed, bracket, date, red_id, blue_id, result, red_mmr, red_rating, blue_mmr, blue_rating))
+                        battle_id = c.lastrowid
+
                         # insert players
                         players = battle.get('combatans').get('dudes')
                         if players:
@@ -124,7 +137,7 @@ def update_data(db, directory, datafile):
                                 is_player = player.get('player', False)
                                 if is_player:
                                     class_ = player.get('class')
-                                    c.execute('''SELECT id FROM class WHERE class.name = ?''', (class_.upper(),))
+                                    c.execute('''SELECT id FROM class WHERE upper(replace(class.name, " ", "")) = ?''', (class_.upper(),))
                                     class_id = c.fetchone()
                                     if class_id is not None:
                                         (class_id, ) = class_id
@@ -142,14 +155,11 @@ def update_data(db, directory, datafile):
                                                                             VALUES( NULL, ?, ?, ?, ?)''', (name, spec, race, class_id))
                                             player_id = c.lastrowid
 
-                                        c.execute('''INSERT INTO team_player (player_id, team_id) VALUES (?, ?)''', (player_id, red_id if team == 1 else blue_id))
+                                        c.execute('''INSERT INTO team_player_battle (id, player_id, team_id, battle_id) VALUES (NULL, ?, ?, ?)''', (player_id, red_id if team == 1 else blue_id, battle_id))
+                                    else:
+                                        sys.stderr.write('ERROR: Unknown class {0}\n'.format(class_))
 
-                        # insert battle
-                        c.execute('''INSERT INTO battle (id, map, elapsed, bracket, date, red_id, blue_id, result, red_mmr, red_rating, blue_mmr, blue_rating)
-                                                    VALUES ( NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
-                            (map_, elapsed, bracket, date, red_id, blue_id, result, red_mmr, red_rating, blue_mmr, blue_rating))
-
-                        filename = os.path.join(directory, '{0}.json'.format(c.lastrowid))
+                        filename = os.path.join(directory, '{0}.json'.format(battle_id))
                         with open(filename, 'w') as o_file:
                             json.dump(battle, o_file)
                         db.commit()
@@ -159,15 +169,71 @@ def update_data(db, directory, datafile):
 
 def setup_table(bracket):
     db = sqlite3.connect('history.db')
-    data = collections.namedtuple('TableContainer', ['header', 'rows', 'bracket'])
+    data = collections.namedtuple('TableContainer', ['header', 'rows', 'bracket', 'best'])
 
     c = db.cursor()
-    c.execute('SELECT id, red_mmr, blue_mmr, date FROM battle WHERE bracket = ?', str(bracket))
+    c.execute('''
+SELECT battle.id AS bid,
+       battle.date AS bdate,
+       map.name AS bmap,
+       ( 
+           SELECT team.name
+             FROM team
+            WHERE team.id = battle.red_id 
+       ) 
+       AS r_team,
+       battle.red_rating AS r_rating,
+       battle.red_mmr AS r_mmr,
+       ( 
+           SELECT group_concat( player.class_id, ' ')
+             FROM player, 
+                  team_player_battle
+            WHERE player.id = team_player_battle.player_id 
+                  AND
+                  team_player_battle.battle_id = battle.id 
+                  AND
+                  team_player_battle.team_id = battle.red_id 
+       ) 
+       AS r_comp,
+       ( 
+           SELECT group_concat( player.class_id, ' ')
+             FROM player, 
+                  team_player_battle
+            WHERE player.id = team_player_battle.player_id 
+                  AND
+                  team_player_battle.battle_id = battle.id 
+                  AND
+                  team_player_battle.team_id = battle.blue_id 
+       ) 
+       AS b_comp,
+       ( 
+           SELECT team.name
+             FROM team
+            WHERE team.id = battle.blue_id 
+       ) 
+       AS b_team,
+       battle.blue_rating AS b_rating,
+       battle.blue_mmr AS b_mmr,
+       strftime( '%M:%S', battle.elapsed, 'unixepoch' ) AS duration,
+       battle.result AS bresult
+  FROM battle
+       JOIN map
+         ON map.id = battle.map
+ WHERE battle.bracket = ?''', str(bracket))
 
     # fill data
-    data.header = ('Id', 'Red MMR', 'Blue MMR', 'Date')
-    data.rows = c.fetchall()
+    data.header = ('Date', 'Map', 'Team', 'Rating', 'MMR', 'Enemy', 'Rating', 'MMR', 'Duration', 'Result')
+    data.rows = map(lambda x : dict(zip(map(lambda v: v[0], c.description), x)), c.fetchall())
+    for row in data.rows:
+        r_comp = row.get('r_comp')
+        b_comp = row.get('b_comp')
+        row['r_comp'] = map(str, sorted(map(int, r_comp.split())))
+        row['b_comp'] = map(str, sorted(map(int, b_comp.split())))
     data.bracket = bracket
+
+    # best rating
+    c.execute('''SELECT max( battle.red_rating ) FROM battle WHERE battle.bracket=?''', str(bracket))
+    (data.best,) = c.fetchone()
 
     db.close()
 
@@ -208,6 +274,9 @@ def main():
     for bracket in (2,3,5):
         data = setup_table(bracket)
         write_file(os.path.join(root, 'web', 'table{0}.html'.format(bracket)), template.render(data=data))
+
+    template = j_loader.get_template('player.html')
+    write_file(os.path.join(root, 'web', 'player.html'), template.render(data=None))
     
     # close db
     db.close()

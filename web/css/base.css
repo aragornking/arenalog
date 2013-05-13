@@ -10,7 +10,7 @@
 
 .player {
     display: block;
-    width: 80%;
-    padding: 50px 10%;
-    height: 300px;
+    border: 2px solid #aaa;
+    width: auto;
+    height: auto;
 }

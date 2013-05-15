@@ -1,12 +1,16 @@
 var CLASS_COLOR_MAP = {'WARRIOR':['#C69B6D', 1, 'Warrior'], 'PALADIN':['#F48CBA', 2, 'Paladin'], 'HUNTER':['#AAD372', 3, 'Hunter'], 'ROGUE':['#FFF468', 4, 'Rogue'], 'PRIEST':['#FFFFFF', 5, 'Priest'], 'DEATHKNIGHT':['#C41E3A', 6, 'Death Knight'], 'SHAMAN':['#0070DD', 7, 'Shaman'], 'MAGE':['#68CCEF', 8, 'Mage'], 'WARLOCK':['#9482C9', 9, 'Warlock'], 'MONK':['#00FF96', 10, 'Monk'], 'DRUID':['#FF7C0A', 11, 'Druid']};
+var NAMES_TABLE = new Object;
 var FRAME_PADDING = 0.6;
 var FRAME_ASPECT = 0.286;
 var HEALTH_BAR_W_ASPECT = 0.78;
 var HEALTH_BAR_H_ASPECT = 0.45;
 var ICON_BORDER = 4;
 var PLAYER_ASPECT = 1.77;
-var INTERVAL_VALUE = 0.1;
+var SPEED = 1.0;
 var FPS = 0;
+var DELTA = 0.0;
+var TIME = 0.0;
+var CRIT_MULTIPLYER = 1.2;
 	
 function Point(x, y){
     x = typeof x !== 'undefined' ? x : 0;
@@ -99,6 +103,63 @@ Rect.prototype = {
     }
 }
 
+function CombatText(s, critical, type){
+    this._s = s;
+    this._critical = critical;
+    this._position = new Point;
+    this._fsize = 12;
+    this._speed = 0.05;
+    this._type = type;
+    this._color = type == 1 ? 'red' : 'green';
+    this._age = 0;
+    this._fadetime = 2500; //miliseconds
+    this._offset_y = 0;
+}
+
+CombatText.prototype = {
+    draw : function(context){
+        if (typeof context !== 'undefined'){
+            context.save();
+            if (this._critical){
+                context.font = 'bold ' + this._fsize*CRIT_MULTIPLYER + 'px monospace';
+            }
+            else{
+                context.font = this._fsize + 'px monospace';
+                context.shadowOffsetX = 0;
+                context.shadowOffsetY = 0;
+                context.shadowBlur = 0;
+            }
+
+            context.globalAlpha = this._age > this._fadetime ? 0 : 1.0 - (this._age / this._fadetime);
+            context.fillStyle = this._color;
+            context.fillText(this._s, this._position.x(), this._position.y() - this._offset_y);
+            context.restore();
+        }
+    },
+    update : function(delta){
+        this._age += delta;
+        this._offset_y += this._speed * delta;
+    },
+    set_position : function(position){
+        this._position = position;
+    },
+    set_font_size : function(value){
+        this._fsize = value;
+    },
+    set_speed : function(value){
+        this._speed = value;
+    },
+    age : function(){
+        return this._age;
+    },
+    set_fadetime : function(value){
+        this._fadetime = value;
+    },
+    alive : function(){
+        return this._age < this._fadetime;
+    }
+}
+
 function Frame(data){
     this._name = data.name;
     this._data = data;
@@ -115,6 +176,7 @@ function Frame(data){
 
     this._stamina = this._data.starthpmax;
     this._maxstamina = this._data.starthpmax;
+    this._combat_text = [];
 }
 
 Frame.prototype = {
@@ -157,18 +219,39 @@ Frame.prototype = {
         # event (18) ARENA_OPPONENT_UPDATE || time, event, id, 2(seen) or 1(unseen) or 3(destroyed) -->  unseed = lost track (stealth), destroyed = has left the arena
         */
 
-        post_id = parseInt(post[2]);
-        if (post_id != this.id())
-            return;
-        
         var event_ = parseInt(post[1]);
+
+        // current hp
         if (event_ == 1)
         {
-            this._stamina = (parseInt(post[3]));
+            if(parseInt(post[2]) == this.id())
+                this._stamina = (parseInt(post[3]));
         }
+        // max hp
         else if (event_ == 2)
         {
-            this._maxstamina = (parseInt(post[3]));
+            if(parseInt(post[2]) == this.id())
+                this._maxstamina = (parseInt(post[3]));
+        }
+        // damage
+        else if ([3, 4, 5, 6].indexOf(event_) !== -1)
+        {
+            if(parseInt(post[3]) == this.id()){
+                var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
+                var critical = parseInt(post[5]);
+                //var s = post[4] + (critical ? '(Critical)' : '');
+                this._combat_text.push(new CombatText(s, critical, 1))
+            }
+        }
+        // healing
+        else if ([7, 8].indexOf(event_) !== -1)
+        {
+            if(parseInt(post[3]) == this.id()){
+                var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
+                var critical = parseInt(post[5]);
+                //var s = post[4] + (critical ? '(Critical)' : '');
+                this._combat_text.push(new CombatText(s, critical, 2))
+            }
         }
     },
     draw : function (context){
@@ -239,13 +322,38 @@ Frame.prototype = {
         context.font = font_h + 'px Arial';
         context.fillText(this._data.race + ' ' + CLASS_COLOR_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
 
+        // draw combat text
+        for (var i = 0; i < this._combat_text.length; i++){
+            
+            if (this._combat_text[i].alive()){
+                this._combat_text[i].set_position(background_r.bottom_right());
+                this._combat_text[i].set_font_size(font_h);
+                this._combat_text[i].update(DELTA);
+                this._combat_text[i].draw(context);
+            }
+        }
         context.restore();
-
     }
+}
+
+function rjust(s, width, fillchar){
+    return Array(width + 1 - s.length).join(fillchar) + s;
+}
+
+function ljust(s, width, fillchar){
+    return s + Array(width + 1 - s.length).join(fillchar);
 }
 
 function get_url_parameter(name) {
     return decodeURI((RegExp(name + '=' + '(.+?)(&|$)').exec(location.search) || [, null])[1]);
+}
+
+function format_time(time){
+    time = time / 1000;
+    var a = b = '0';
+    if (Math.floor(time / 60) >= 10) a = '';
+    if (Math.floor(time % 60) >= 10) b = '';
+    return (a + Math.floor(time/60) + ':' + b + Math.floor(time % 60) + ',' + Math.floor(time % 60 * 10 % 10));
 }
 
 $(document).ready(function () {
@@ -271,7 +379,6 @@ $(document).ready(function () {
     var context = canvas.get(0).getContext('2d');
     var container = $(canvas).parent();
     var frames = [];
-    var time = 0.0;
     var tick = 0;
 
     var now = null;
@@ -293,24 +400,39 @@ $(document).ready(function () {
 	}
 
     function draw_info(){
+        var line = 0;
+        var size = 16;
+        var adjust_size = 14;
+
+        var pprint = function(key, value){
+            return ljust(key, adjust_size, ' ') + ': ' + value;
+        };
+
         context.save();
+
         // font 
         context.textAlign = 'left';
         context.textBaseline = 'hanging';
-        context.font = '12px monospace';
+        context.font = size + 'px monospace';
 
-        context.fillText(FPS.toFixed(1), 0, 0);
+        line++;
+        context.fillText(pprint('FPS', FPS.toFixed(1)), 0, size*line);
+
+        line++;
+        var elapsed = 0.0;
+        if (json_data.data.length > tick) elapsed = json_data.data[tick].split(',')[0];
+        context.fillText(pprint('Elapsed', format_time(elapsed*1000)), 0, size*line);
+
+        line++;
+        context.fillText(pprint('Time', format_time(TIME)), 0, size*line);
         context.restore();
     }
 
     function display() {
         // clear
-		clear_canvas();
-
-        draw_info();
+        clear_canvas();
 
         var post = null;
-        time += INTERVAL_VALUE;
 
         while (true)
         {
@@ -318,7 +440,7 @@ $(document).ready(function () {
                 break;
             else{
                 post = json_data.data[tick].split(',');
-                if (!post || parseInt(post[0]) >= time){
+                if (!post || parseFloat(post[0]) >= (TIME/1000)){
                     break;
                 }
                 else{
@@ -329,9 +451,14 @@ $(document).ready(function () {
                 }
             }
         }
+
+        // draw frames
         for (var i = 0; i < frames.length; i++) {
             frames[i].draw(context);
         }
+
+        // overlay info
+        draw_info();
     }
 	
 	//window.requestAnimationFrame
@@ -376,6 +503,9 @@ $(document).ready(function () {
                     xmin = dude.team == 2 ? w_step : 0;
                     xmax = xmin + w_step;
 
+                    // update names table
+                    NAMES_TABLE[dude.ID] = dude.name;
+
                     if (dude.team == 1)
                     {
                         ymin = last_red_y;
@@ -399,8 +529,9 @@ $(document).ready(function () {
 	}
 	
 	function animate(){
-        var this_fps = 1000 / ((now = new Date) - last_update);
-        FPS += (this_fps - FPS) / fps_filter;
+        DELTA = ((now = new Date) - last_update);
+        TIME += DELTA;
+        FPS += (1000/DELTA - FPS) / fps_filter;
         last_update = now;
 
 		display();

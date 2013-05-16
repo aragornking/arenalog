@@ -1,4 +1,5 @@
-var CLASS_COLOR_MAP = {'WARRIOR':['#C69B6D', 1, 'Warrior'], 'PALADIN':['#F48CBA', 2, 'Paladin'], 'HUNTER':['#AAD372', 3, 'Hunter'], 'ROGUE':['#FFF468', 4, 'Rogue'], 'PRIEST':['#FFFFFF', 5, 'Priest'], 'DEATHKNIGHT':['#C41E3A', 6, 'Death Knight'], 'SHAMAN':['#0070DD', 7, 'Shaman'], 'MAGE':['#68CCEF', 8, 'Mage'], 'WARLOCK':['#9482C9', 9, 'Warlock'], 'MONK':['#00FF96', 10, 'Monk'], 'DRUID':['#FF7C0A', 11, 'Druid']};
+var CLASS_MAP = {'WARRIOR':['#C69B6D', 1, 'Warrior', 1], 'PALADIN':['#F48CBA', 2, 'Paladin', 0], 'HUNTER':['#AAD372', 3, 'Hunter', 2], 'ROGUE':['#FFF468', 4, 'Rogue', 3], 'PRIEST':['#FFFFFF', 5, 'Priest', 0], 'DEATHKNIGHT':['#C41E3A', 6, 'Death Knight', 6], 'SHAMAN':['#0070DD', 7, 'Shaman', 0], 'MAGE':['#68CCEF', 8, 'Mage', 0], 'WARLOCK':['#9482C9', 9, 'Warlock', 0], 'MONK':['#00FF96', 10, 'Monk', 3], 'DRUID':['#FF7C0A', 11, 'Druid', 99]};
+var POWER_TYPE = {0 : ['MANA', '#0066CC', 1], 1 : ['RAGE', '#FF0000', 0], 2 : ['FOCUS', '#996633', 1], 3 : ['ENERGY', '#FFFF00', 1], 6 : ['RUNIC', '#336699', 0], 99 : ['UNDEFINED', '#444444', 0]};
 var NAMES_TABLE = new Object;
 var FRAME_PADDING = 0.6;
 var FRAME_ASPECT = 0.286;
@@ -10,7 +11,8 @@ var SPEED = 1.0;
 var FPS = 0;
 var DELTA = 0.0;
 var TIME = 0.0;
-var CRIT_MULTIPLYER = 1.2;
+var CRIT_MULTIPLYER = 2.2;
+var CRIT_SPEED = 0.05;
 	
 function Point(x, y){
     x = typeof x !== 'undefined' ? x : 0;
@@ -103,11 +105,59 @@ Rect.prototype = {
     }
 }
 
+function Aura(spellid, duration, type, priority){
+    this._spellid = spellid;
+    this._type = type;
+    this._age = 0;
+    this._icon = new Image();
+    this._icon.src = 'img/icons/56/' + spellid + '.jpg';
+    this._duration = duration*1000;
+    this._priority = 1;
+    this._rect = new Rect();
+    this._priority = typeof priority !== 'undefined' ? priority : 1;
+}
+
+Aura.prototype = {
+    id : function(){
+        return this._spellid;
+    },
+    icon : function(){
+        return this._icon;
+    },
+    update : function(delta){
+        this._age += delta;
+    },
+    draw : function(context){
+        context.save();
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.fillText(((this._duration - this._age)/1000).toFixed(1), this.geometry().center().x(), this.geometry().center().y());
+        context.restore();
+    },
+    geometry : function(){
+        return this._rect;
+    },
+    set_rect : function(value){
+        this._rect = value;
+    },
+    priority : function(){
+        return this._priority;
+    },
+    alive : function(){
+        return this._age < this._duration;
+    },
+    kill : function(){
+        this._age = this._fadetime * 2;
+    }
+}
+
 function CombatText(s, critical, type){
     this._s = s;
     this._critical = critical;
     this._position = new Point;
     this._fsize = 12;
+    this._fcritsize = this._fsize * CRIT_MULTIPLYER;
     this._speed = 0.05;
     this._type = type;
     this._color = type == 1 ? 'red' : 'green';
@@ -120,14 +170,17 @@ CombatText.prototype = {
     draw : function(context){
         if (typeof context !== 'undefined'){
             context.save();
+
+            context.shadowOffsetX = 0;
+            context.shadowOffsetY = 0;
+            context.shadowBlur = 0;
+            context.textAlign = 'center';
+
             if (this._critical){
-                context.font = 'bold ' + this._fsize*CRIT_MULTIPLYER + 'px monospace';
+                context.font = 'bold ' + this._fcritsize + 'px monospace';
             }
             else{
                 context.font = this._fsize + 'px monospace';
-                context.shadowOffsetX = 0;
-                context.shadowOffsetY = 0;
-                context.shadowBlur = 0;
             }
 
             context.globalAlpha = this._age > this._fadetime ? 0 : 1.0 - (this._age / this._fadetime);
@@ -139,6 +192,7 @@ CombatText.prototype = {
     update : function(delta){
         this._age += delta;
         this._offset_y += this._speed * delta;
+        this._fcritsize = this._fcritsize > this._fsize ? this._fcritsize - CRIT_SPEED*delta : this._fsize;
     },
     set_position : function(position){
         this._position = position;
@@ -157,6 +211,9 @@ CombatText.prototype = {
     },
     alive : function(){
         return this._age < this._fadetime;
+    },
+    kill : function(){
+        this._age = this._fadetime * 2;
     }
 }
 
@@ -165,17 +222,19 @@ function Frame(data){
     this._data = data;
     this._buffs = [];
     this._debuffs = [];
+    this._control = [];
     this._parent = null;
     this._rect = new Rect();
     // icon image
     this._icon_image = new Image();
-    this._icon_image.src = 'img/icons/56/class_' + CLASS_COLOR_MAP[this._data.class][1] + '.jpg';
+    this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data.class][1] + '.jpg';
     // bar image
     this._bar_image = new Image();
     this._bar_image.src = 'img/minimalist.png';
 
     this._stamina = this._data.starthpmax;
     this._maxstamina = this._data.starthpmax;
+    this._power = POWER_TYPE[CLASS_MAP[this._data.class][3]][2] * 100;
     this._combat_text = [];
 }
 
@@ -215,7 +274,7 @@ Frame.prototype = {
         # event (12) SPELL_INTERRUPT || time, event, source_id, dest_id, spellid, amount
         # event (13) create new buf, debuff || time, event, id, spellid, 1(buff) or 2(debuff), buff_time --> UnitBuff(unit, n), UnitDebuff(unit, n) n = 1,40
         # event (14) remove existing buf, debuff || time, event, id, index, 1(buff) or 2(debuff)
-        # event (17) mana related || time, event, id, value = math.floor( UnitMana(unit) / UnitManaMax(unit) * 100) 
+        # event (17) UNIT_POWER || time, event, id, value = math.floor( UnitMana(unit) / UnitManaMax(unit) * 100) 
         # event (18) ARENA_OPPONENT_UPDATE || time, event, id, 2(seen) or 1(unseen) or 3(destroyed) -->  unseed = lost track (stealth), destroyed = has left the arena
         */
 
@@ -239,7 +298,6 @@ Frame.prototype = {
             if(parseInt(post[3]) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical = parseInt(post[5]);
-                //var s = post[4] + (critical ? '(Critical)' : '');
                 this._combat_text.push(new CombatText(s, critical, 1))
             }
         }
@@ -249,8 +307,41 @@ Frame.prototype = {
             if(parseInt(post[3]) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical = parseInt(post[5]);
-                //var s = post[4] + (critical ? '(Critical)' : '');
                 this._combat_text.push(new CombatText(s, critical, 2))
+            }
+        }
+        // cast start
+        else if(event_ == 9){
+            if(parseInt(post[2]) == this.id()){
+            }
+        }
+        else if(event_ == 13){
+            if(parseInt(post[2]) == this.id()){
+                var spell_id = parseInt(post[3]);
+                var type = parseInt(post[4]);
+                var duration = parseFloat(post[5]);
+                if (duration > 0 && CC_TABLE.hasOwnProperty(spell_id)){
+                    this._control.push(new Aura(spell_id, duration, type, CC_TABLE.spell_id));
+                }
+            }
+        }
+        else if(event_ == 14){
+            if(parseInt(post[2]) == this.id()){
+                var spell_id = parseInt(post[3]);
+                var type = parseInt(post[4]);
+                if (CC_TABLE.hasOwnProperty(spell_id)){
+                    for (var i = 0; i < this._control.length; i++){
+                        if (this._control[i].id() == spell_id){
+                            this._control[i].kill();
+                        }
+                    }
+                }
+            }
+        }
+        // unit power
+        else if(event_ == 17){
+            if(parseInt(post[2]) == this.id()){
+                this._power = parseInt(post[3]);
             }
         }
     },
@@ -270,8 +361,12 @@ Frame.prototype = {
         var power_r = new Rect(stamina_r.left(), stamina_r.bottom() + ICON_BORDER/2, stamina_r.width(), icon_r.height() - stamina_r.height());
         var cast_r = new Rect(background_r.left(), icon_r.bottom(), background_r.width(), background_r.height() - icon_r.height() - ICON_BORDER/2);
 
+        // update stamina_bar
         var stamina_bar = jQuery.extend(true, {}, stamina_r);
         stamina_bar.set_width(stamina_bar.width() * (this._stamina / this._maxstamina));
+        // update power_bar
+        var power_bar = jQuery.extend(true, {}, power_r);
+        power_bar.set_width(power_bar.width() * (this._power / 100));
 
         // draw background
         context.fillStyle = 'rgba(125, 125, 125, 0.5)';
@@ -281,15 +376,15 @@ Frame.prototype = {
         context.drawImage(this._icon_image, icon_r.x(), icon_r.y(), icon_r.width(), icon_r.height());
 
         // draw stamina_r
-        context.fillStyle = CLASS_COLOR_MAP[this._data.class][0];
+        context.fillStyle = CLASS_MAP[this._data.class][0];
         context.fillRect(stamina_bar.x(), stamina_bar.y(), stamina_bar.width(), stamina_bar.height());
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, stamina_r.x(), stamina_r.y(), stamina_r.width(), stamina_r.height());
         context.globalAlpha = 1.0;
 
         // draw power
-        //context.fillStyle = 'blue';
-        //context.fillRect(power_r.x(), power_r.y(), power_r.width(), power_r.height());
+        context.fillStyle = POWER_TYPE[CLASS_MAP[this._data.class][3]][1]
+        context.fillRect(power_bar.x(), power_bar.y(), power_bar.width(), power_bar.height());
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, power_r.x(), power_r.y(), power_r.width(), power_r.height());
         context.globalAlpha = 1.0;
@@ -317,21 +412,37 @@ Frame.prototype = {
         // draw hpoints text
         context.fillText(this._stamina, stamina_r.right() - context.measureText(this._data.starthpmax).width - font_offset, stamina_r.top() + font_offset);
 
+        // draw cc
+        this._control.sort(function(a,b){return b.priority() - a.priority()});
+        for (var i = 0; i < this._control.length; i++){
+            if (this._control[i].alive()){
+                this._control[i].set_rect(icon_r);
+                this._control[i].update(DELTA);
+                this._control[i].draw(context);
+            }
+        }
+
         // draw race class
         var font_h = Math.round(power_r.height()/2);
         context.font = font_h + 'px Arial';
-        context.fillText(this._data.race + ' ' + CLASS_COLOR_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
+        context.fillText(this._data.race + ' ' + CLASS_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
+
+        // draw power value
+        font_offset = (power_r.height() - font_h)/2;
+        context.fillText(this._power, power_r.right() - context.measureText('100').width - font_offset, power_r.top() + font_offset);
+
 
         // draw combat text
         for (var i = 0; i < this._combat_text.length; i++){
             
             if (this._combat_text[i].alive()){
-                this._combat_text[i].set_position(background_r.bottom_right());
+                this._combat_text[i].set_position(background_r.top_right());
                 this._combat_text[i].set_font_size(font_h);
                 this._combat_text[i].update(DELTA);
                 this._combat_text[i].draw(context);
             }
         }
+
         context.restore();
     }
 }
@@ -366,14 +477,6 @@ $(document).ready(function () {
         main();
 	});
 
-    //spellid info
-    //$.getJSON("http://eu.battle.net/api/wow/spell/19750?jsonp=?", function(data){
-    //    console.log(data);
-    //});
-
-    // spellicon 18, 36, 56 sizes
-    // http://media.blizzard.com/wow/icons/36/spell_holy_flashheal.jpg
-
 	//globals
     var canvas = $("#arena-player");
     var context = canvas.get(0).getContext('2d');
@@ -384,8 +487,6 @@ $(document).ready(function () {
     var now = null;
     var last_update = (new Date)*1 - 1;
     var fps_filter = 50;
-
-    //$(window).resize(resize_canvas);
 
     function resize_canvas() {
         canvas.attr('width', $(container).width());
@@ -461,7 +562,7 @@ $(document).ready(function () {
         draw_info();
     }
 	
-	//window.requestAnimationFrame
+	// window.requestAnimationFrame
 	window.requestAnimationFrame = (function(){
     return  window.requestAnimationFrame       ||  //Chromium 
             window.webkitRequestAnimationFrame ||  //Webkit
@@ -530,7 +631,7 @@ $(document).ready(function () {
 	
 	function animate(){
         DELTA = ((now = new Date) - last_update);
-        TIME += DELTA;
+        TIME += DELTA*SPEED;
         FPS += (1000/DELTA - FPS) / fps_filter;
         last_update = now;
 
@@ -539,7 +640,9 @@ $(document).ready(function () {
 	}
 
     function main(){
-        init();
-        animate();
+        $.getScript('js/constants.js', function(){
+            init();
+            animate();
+        });
     }
 });

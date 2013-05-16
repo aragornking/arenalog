@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import jinja2
+import urllib2
 import collections
 import time
 import sqlite3
@@ -54,12 +55,31 @@ def build_tables(db):
                                                         "blue_mmr" INTEGER NOT NULL,
                                                         "blue_rating" INTEGER NOT NULL,
                                                         "result" INTEGER NOT NULL DEFAULT 0)''')
+    # spell
+    c.execute('''CREATE TABLE IF NOT EXISTS spell   (   "id" INTEGER PRIMARY KEY UNIQUE,
+                                                       "name" TEXT NOT NULL,
+                                                       "icon" TEXT NOT NULL,
+                                                       "description" TEXT NOT NULL,
+                                                       "range" TEXT NOT NULL,
+                                                       "powercost" TEXT NOT NULL,
+                                                       "casttime" TEXT NOT NULL)''')
     db.commit()
 
 def time_to_sql(timestamp):
     # convert the format stored by aav to sqlite format
-    in_date = time.strptime(str(timestamp), '%d/%m/%y %H:%M:%S')
+    in_date = time.strptime(str(timestamp), '%m/%d/%y %H:%M:%S')
     return time.strftime("%Y-%m-%d %H:%M:%S", in_date)
+
+def fetch_spell_data(spell_id):
+    img_dir = os.path.join(os.path.dirname(__file__), 'web', 'img', 'icons')
+    response = urllib2.urlopen('http://eu.battle.net/api/wow/spell/{id}'.format(id=spell_id))
+    spell_info = json.load(response)
+    for size in (18, 36, 56):
+        url = 'http://media.blizzard.com/wow/icons/{size}/{spell_name}.jpg'.format(size = size, spell_name = spell_info.get('icon'))
+        file = os.path.join(img_dir, str(size), '{0}.jpg'.format(spell_info.get('id')))
+        with open(file, 'wb') as out_image:
+            out_image.write(urllib2.urlopen(url).read())
+    return spell_info
 
 def update_data(db, directory, datafile):
     battles = None
@@ -102,6 +122,35 @@ def update_data(db, directory, datafile):
 
                 c.execute('''SELECT id FROM battle WHERE battle.date = ? AND battle.map = ? AND battle.bracket = ?''', (date, map_, bracket))
                 battle_id = c.fetchone()
+
+                # insert spell
+                battle_data = battle.get('data')
+                spell_id = None
+                if battle_data is not None:
+                    for line in battle_data:
+                        tokens = line.split(',')
+                        event = int(tokens[1])
+                        if event in (9, 10, 12):
+                            spell_id = int(tokens[4])
+                        elif event == 13:
+                            spell_id = int(tokens[3])
+                            c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
+                            id = c.fetchone()
+                            if id is not None:
+                                pass
+                            else:
+                                spell_info = fetch_spell_data(spell_id)
+                                id = int(spell_info.get('id'))
+                                name = spell_info.get('name')
+                                icon = spell_info.get('icon')
+                                description = spell_info.get('description')
+                                range = spell_info.get('range', '')
+                                powercost = spell_info.get('powerCost', '')
+                                casttime = spell_info.get('castTime')
+
+                                c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime)
+                                             VALUES (?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime))
+                                db.commit()
 
                 # insert new battle if we dont have it in the database
                 if battle_id is None:
@@ -159,6 +208,7 @@ def update_data(db, directory, datafile):
                                     else:
                                         sys.stderr.write('ERROR: Unknown class {0}\n'.format(class_))
 
+                        # write data file
                         filename = os.path.join(directory, '{0}.json'.format(battle_id))
                         with open(filename, 'w') as o_file:
                             json.dump(battle, o_file)
@@ -227,8 +277,16 @@ SELECT battle.id AS bid,
     for row in data.rows:
         r_comp = row.get('r_comp')
         b_comp = row.get('b_comp')
-        row['r_comp'] = map(str, sorted(map(int, r_comp.split())))
-        row['b_comp'] = map(str, sorted(map(int, b_comp.split())))
+
+        try:
+            row['r_comp'] = map(str, sorted(map(int, r_comp.split())))
+        except Exception as e:
+            row['r_comp'] = []
+        try:
+            row['b_comp'] = map(str, sorted(map(int, b_comp.split())))
+        except Exception as e:
+            row['b_comp'] = []
+
     data.bracket = bracket
 
     # best rating

@@ -134,23 +134,23 @@ def update_data(db, directory, datafile):
                             spell_id = int(tokens[4])
                         elif event == 13:
                             spell_id = int(tokens[3])
-                            c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
-                            id = c.fetchone()
-                            if id is not None:
-                                pass
-                            else:
-                                spell_info = fetch_spell_data(spell_id)
-                                id = int(spell_info.get('id'))
-                                name = spell_info.get('name')
-                                icon = spell_info.get('icon')
-                                description = spell_info.get('description')
-                                range = spell_info.get('range', '')
-                                powercost = spell_info.get('powerCost', '')
-                                casttime = spell_info.get('castTime')
+                        c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
+                        id = c.fetchone()
+                        if id is not None:
+                            pass
+                        else:
+                            spell_info = fetch_spell_data(spell_id)
+                            id = int(spell_info.get('id'))
+                            name = spell_info.get('name')
+                            icon = spell_info.get('icon')
+                            description = spell_info.get('description')
+                            range = spell_info.get('range', '')
+                            powercost = spell_info.get('powerCost', '')
+                            casttime = spell_info.get('castTime')
 
-                                c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime)
-                                             VALUES (?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime))
-                                db.commit()
+                            c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime))
+                            db.commit()
 
                 # insert new battle if we dont have it in the database
                 if battle_id is None:

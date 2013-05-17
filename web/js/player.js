@@ -37,14 +37,10 @@ Point.prototype = {
 }
 
 function Rect(x, y, w, h){
-    x = typeof x !== 'undefined' ? x : 0;
-    y = typeof y !== 'undefined' ? y : 0;
-    w = typeof w !== 'undefined' ? w : 0;
-    h = typeof h !== 'undefined' ? h : 0;
-    this._x = x;
-    this._y = y;
-    this._w = w;
-    this._h = h;
+    this._x = typeof x !== 'undefined' ? x : 0;
+    this._y = typeof y !== 'undefined' ? y : 0;
+    this._w = typeof w !== 'undefined' ? w : 0;
+    this._h = typeof h !== 'undefined' ? h : 0;
 }
 
 Rect.prototype = {
@@ -88,10 +84,10 @@ Rect.prototype = {
         return new Point(this.right(), this.top());
     },
     translate : function(x, y){
+        x = typeof x !== 'undefined' ? x : 0;
+        y = typeof y !== 'undefined' ? y : 0;
         this._x += x;
         this._y += y;
-        this._w += x;
-        this._h += y;
     },
     x : function(){
         return this._x;
@@ -105,19 +101,120 @@ Rect.prototype = {
     }
 }
 
-function Aura(spellid, duration, type, priority){
+function Trinket(){
+    this._icon = new Image();
+    this._icon.src = 'img/icons/56/pvp_trinket.jpg';
+    this._geometry = new Rect();
+    this._duration = 120000; // 2 min
+    this._age = Number.MAX_VALUE; // more than duration
+}
+
+Trinket.prototype = {
+    geometry : function(){
+        return this._geometry;
+    },
+    icon : function(){
+        return this._icon;
+    },
+    set_geometry : function(value){
+        this._geometry = value;
+    },
+    update : function(delta){
+        this._age += delta;
+    },
+    pressed : function(){
+        this._age = 0;
+    },
+    draw : function(context){
+        context.save();
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+
+        context.shadowOffsetX = 0;
+        context.shadowOffsetY = 0;
+        context.shadowBlur = 0;
+
+        context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        if (this.alive()){
+            context.beginPath();
+            context.moveTo(this.geometry().x(), this.geometry().y());
+            context.lineTo(this.geometry().top_right().x(), this.geometry().top_right().y());
+            context.lineTo(this.geometry().bottom_right().x(), this.geometry().bottom_right().y());
+            context.lineTo(this.geometry().bottom_left().x(), this.geometry().bottom_left().y());
+            context.closePath();
+            context.clip();
+
+            context.globalAlpha = 0.3;
+
+            context.fillStyle = 'black';
+            context.strokeStyle = 'white';
+            context.beginPath();
+            context.moveTo(this.geometry().center().x(), this.geometry().center().y());
+            context.arc(this.geometry().center().x(), this.geometry().center().y(), this.geometry().width(), 0, 2*Math.PI * (this._age / this._duration), true);
+            context.closePath();
+            context.fill();
+            context.stroke();
+
+            context.globalAlpha = 1.0;
+            context.fillStyle = 'white';
+            context.fillText(((this._duration - this._age)/1000).toFixed(0), this.geometry().center().x(), this.geometry().center().y());
+        }
+        context.restore();
+    },
+    alive : function(){
+        return this._age < this._duration;
+    },
+    kill : function(){
+        this._age = Number.MAX_VALUE;
+    }
+}
+
+function Aura(spellid, duration, type){
+    this._spellid = spellid;
+    this._type = type;
+    this._icon = new Image();
+    this._icon.src = 'img/icons/18/'+spellid+'.jpg';
+    this._geometry = new Rect();
+    this._age = 0;
+    this._duration = duration*1000;
+}
+
+Aura.prototype = {
+    id : function(){
+        return this._spellid;
+    },
+    type : function(){
+        return this._type;
+    },
+    geometry : function(){
+        return this._geometry;
+    },
+    update : function(delta){
+        this._age += delta;
+    },
+    draw : function(context){
+    },
+    alive : function(){
+        return this._age < this._duration;
+    },
+    kill : function(){
+        this._age = Number.MAX_VALUE;
+    }
+}
+
+function CrowdControl(spellid, duration, type, priority){
     this._spellid = spellid;
     this._type = type;
     this._age = 0;
     this._icon = new Image();
-    this._icon.src = 'img/icons/56/' + spellid + '.jpg';
+    this._icon.src = 'img/icons/56/'+spellid+'.jpg';
     this._duration = duration*1000;
     this._priority = 1;
-    this._rect = new Rect();
+    this._geometry = new Rect();
     this._priority = typeof priority !== 'undefined' ? priority : 1;
 }
 
-Aura.prototype = {
+CrowdControl.prototype = {
     id : function(){
         return this._spellid;
     },
@@ -136,10 +233,10 @@ Aura.prototype = {
         context.restore();
     },
     geometry : function(){
-        return this._rect;
+        return this._geometry;
     },
-    set_rect : function(value){
-        this._rect = value;
+    set_geometry : function(value){
+        this._geometry = value;
     },
     priority : function(){
         return this._priority;
@@ -148,7 +245,7 @@ Aura.prototype = {
         return this._age < this._duration;
     },
     kill : function(){
-        this._age = this._fadetime * 2;
+        this._age = Number.MAX_VALUE;
     }
 }
 
@@ -213,7 +310,7 @@ CombatText.prototype = {
         return this._age < this._fadetime;
     },
     kill : function(){
-        this._age = this._fadetime * 2;
+        this._age = Number.MAX_VALUE;
     }
 }
 
@@ -224,7 +321,7 @@ function Frame(data){
     this._debuffs = [];
     this._control = [];
     this._parent = null;
-    this._rect = new Rect();
+    this._geometry = new Rect();
     // icon image
     this._icon_image = new Image();
     this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data.class][1] + '.jpg';
@@ -236,6 +333,9 @@ function Frame(data){
     this._maxstamina = this._data.starthpmax;
     this._power = POWER_TYPE[CLASS_MAP[this._data.class][3]][2] * 100;
     this._combat_text = [];
+
+    // trinket
+    this._trinket = new Trinket();
 }
 
 Frame.prototype = {
@@ -249,10 +349,10 @@ Frame.prototype = {
         this._debuffs.push(debuff);
     },
     translate : function(x, y){
-        this._rect.translate(x, y);
+        this._geometry.translate(x, y);
     },
-    set_rect : function(x, y, w, h){
-        this._rect = new Rect(x, y, w, h);
+    set_geometry : function(x, y, w, h){
+        this._geometry = new Rect(x, y, w, h);
     },
     scale : function(scale){
         self._rect.set_size(self._rect.width()*scale, self._rect.height()*scale);
@@ -315,16 +415,29 @@ Frame.prototype = {
             if(parseInt(post[2]) == this.id()){
             }
         }
+        // spell success
+        else if(event_ == 10){
+            if(parseInt(post[2]) == this.id()){
+                var target = parseInt(post[3]);
+                var spell_id = parseInt(post[4]);
+                var duration = parseInt(post[5]);
+                if (spell_id == 59752 || spell_id == 42292){
+                    this._trinket.pressed();
+                }
+            }
+        }
+        // add aura
         else if(event_ == 13){
             if(parseInt(post[2]) == this.id()){
                 var spell_id = parseInt(post[3]);
                 var type = parseInt(post[4]);
                 var duration = parseFloat(post[5]);
                 if (duration > 0 && CC_TABLE.hasOwnProperty(spell_id)){
-                    this._control.push(new Aura(spell_id, duration, type, CC_TABLE.spell_id));
+                    this._control.push(new CrowdControl(spell_id, duration, type, CC_TABLE.spell_id));
                 }
             }
         }
+        // remove aura
         else if(event_ == 14){
             if(parseInt(post[2]) == this.id()){
                 var spell_id = parseInt(post[3]);
@@ -347,13 +460,13 @@ Frame.prototype = {
     },
     draw : function (context){
         context.save();
-        context.translate(this._rect.x(), this._rect.y());
+        context.translate(this._geometry.x(), this._geometry.y());
 
         // calculate rectangles
-        var ww = this._rect.width() * FRAME_PADDING;
+        var ww = this._geometry.width() * FRAME_PADDING;
         var hh = ww * FRAME_ASPECT;
-        var offset_w = (this._rect.width()-ww)/2;
-        var offset_h = (this._rect.height()-hh)/2;
+        var offset_w = (this._geometry.width()-ww)/2;
+        var offset_h = (this._geometry.height()-hh)/2;
 
         var background_r = new Rect(offset_w, offset_h, ww, hh);
         var icon_r = new Rect(background_r.x() + ICON_BORDER*0.5, background_r.y() + ICON_BORDER*0.5, background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT), background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT));
@@ -364,6 +477,7 @@ Frame.prototype = {
         // update stamina_bar
         var stamina_bar = jQuery.extend(true, {}, stamina_r);
         stamina_bar.set_width(stamina_bar.width() * (this._stamina / this._maxstamina));
+
         // update power_bar
         var power_bar = jQuery.extend(true, {}, power_r);
         power_bar.set_width(power_bar.width() * (this._power / 100));
@@ -405,6 +519,11 @@ Frame.prototype = {
         context.shadowOffsetX = -font_h*0.1;
         context.shadowOffsetY = font_h*0.1;
 
+        // draw trinket
+        this._trinket.set_geometry( new Rect(background_r.top_right().x() + ICON_BORDER/2, background_r.top_right().y(), background_r.height(), background_r.height()));
+        this._trinket.update(DELTA);
+        this._trinket.draw(context);
+
         // draw name text
         font_offset = (stamina_r.height() - font_h)/2;
         context.fillText(this._name, stamina_r.left() + font_offset, stamina_r.top() + font_offset);
@@ -416,7 +535,7 @@ Frame.prototype = {
         this._control.sort(function(a,b){return b.priority() - a.priority()});
         for (var i = 0; i < this._control.length; i++){
             if (this._control[i].alive()){
-                this._control[i].set_rect(icon_r);
+                this._control[i].set_geometry(icon_r);
                 this._control[i].update(DELTA);
                 this._control[i].draw(context);
             }
@@ -621,7 +740,7 @@ $(document).ready(function () {
 
                     // init each frame
                     d_frame = new Frame(dude);
-                    d_frame.set_rect(xmin, ymin, xmax - xmin, ymax - ymin);
+                    d_frame.set_geometry(xmin, ymin, xmax - xmin, ymax - ymin);
                     frames.push(d_frame);
                 }
                 index++;
@@ -630,8 +749,8 @@ $(document).ready(function () {
 	}
 	
 	function animate(){
-        DELTA = ((now = new Date) - last_update);
-        TIME += DELTA*SPEED;
+        DELTA = ((now = new Date) - last_update) * SPEED;
+        TIME += DELTA;
         FPS += (1000/DELTA - FPS) / fps_filter;
         last_update = now;
 

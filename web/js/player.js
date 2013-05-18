@@ -13,6 +13,67 @@ var DELTA = 0.0;
 var TIME = 0.0;
 var CRIT_MULTIPLYER = 2.2;
 var CRIT_SPEED = 0.05;
+var MAX_AURA_NUMBER = 10;
+var MOUSE_X = 0;
+var MOUSE_Y = 0;
+var PLAY = true;
+
+function Buffer(maxsize){
+    this._data = [];
+    this._max = maxsize !== 'undefined' ? maxsize : Number.MAX_VALUE;
+    this._index = 0;
+}
+
+Buffer.prototype = {
+    push : function(value){
+        this._data.push(value);
+        if (this._data.length >= this._max){
+            this._data.shift();
+        }
+    },
+    size : function(){
+        return this._data.length;
+    },
+    next : function(){
+        if (this._index < this._data.length){
+            result = this._data[this._index];
+            this._index++;
+            return result;
+        }
+        else{
+            return null;
+        }
+    },
+    reset : function(){
+        this._index = 0;
+    },
+    map : function(callback){
+        for (var i = 0; i < this._data.length; i++){
+            callback(this._data[i]);
+        }
+    }
+}
+
+function Tooltip(geometry, text){
+    this._geometry = geometry;
+    this._text = text;
+}
+
+Tooltip.prototype = {
+    geometry : function(){
+        return this._geometry;
+    },
+    draw : function(context){
+        //context.save();
+        //context.shadowOffsetX = 0;
+        //context.shadowOffsetY = 0;
+        //context.shadowBlur = 0;
+        //context.strokeStyle = 'black';
+        //context.lineWidth = 1;
+        //context.strokeRect(this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        //context.restore();
+    }
+}
 	
 function Point(x, y){
     x = typeof x !== 'undefined' ? x : 0;
@@ -98,6 +159,22 @@ Rect.prototype = {
     set_size : function(w, h){
         self._w = w;
         self._h = h;
+    },
+    set_position : function(x, y){
+        this._x = x;
+        this._y = y;
+    },
+    set_x : function(x){
+        this._x = x;
+    },
+    set_y : function(y){
+        this._y = y;
+    },
+    set_w : function(w){
+        this._w = w;
+    },
+    set_h : function(h){
+        this._h = h;
     }
 }
 
@@ -144,7 +221,7 @@ Trinket.prototype = {
             context.closePath();
             context.clip();
 
-            context.globalAlpha = 0.3;
+            context.globalAlpha = 0.5;
 
             context.fillStyle = 'black';
             context.strokeStyle = 'white';
@@ -169,7 +246,7 @@ Trinket.prototype = {
     }
 }
 
-function Aura(spellid, duration, type){
+function Aura(spellid, duration, type, parent){
     this._spellid = spellid;
     this._type = type;
     this._icon = new Image();
@@ -177,11 +254,15 @@ function Aura(spellid, duration, type){
     this._geometry = new Rect();
     this._age = 0;
     this._duration = duration*1000;
+    this._parent = parent !== 'undefined' ? parent : null;
 }
 
 Aura.prototype = {
     id : function(){
         return this._spellid;
+    },
+    icon : function(){
+        return this._icon;
     },
     type : function(){
         return this._type;
@@ -189,16 +270,35 @@ Aura.prototype = {
     geometry : function(){
         return this._geometry;
     },
+    world_geometry : function(){
+        return new Rect(this.geometry().x() + this.parent().geometry().x(), this.geometry().y() + this.parent().geometry().y(), this.geometry().width(), this.geometry().height());
+    },
+    set_geometry : function(value){
+        this._geometry = value;
+    },
     update : function(delta){
         this._age += delta;
     },
     draw : function(context){
+        context.save();
+        context.shadowOffsetX = 0;
+        context.shadowOffsetY = 0;
+        context.shadowBlur = 0;
+        context.strokeStyle = 'black';
+        context.lineWidth = 1;
+
+        context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.strokeRect(this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.restore();
     },
     alive : function(){
         return this._age < this._duration;
     },
     kill : function(){
         this._age = Number.MAX_VALUE;
+    },
+    parent : function(){
+        return this._parent;
     }
 }
 
@@ -329,13 +429,24 @@ function Frame(data){
     this._bar_image = new Image();
     this._bar_image.src = 'img/minimalist.png';
 
+    // stamina
     this._stamina = this._data.starthpmax;
     this._maxstamina = this._data.starthpmax;
+
+    // power amount
     this._power = POWER_TYPE[CLASS_MAP[this._data.class][3]][2] * 100;
-    this._combat_text = [];
+
+    // aura buffer
+    this._auras = new Buffer(50);
+
+    // combat text buffer
+    this._combat_text = new Buffer(50);
 
     // trinket
     this._trinket = new Trinket();
+
+    // tooltip
+    this._tooltip = null;
 }
 
 Frame.prototype = {
@@ -351,11 +462,17 @@ Frame.prototype = {
     translate : function(x, y){
         this._geometry.translate(x, y);
     },
+    geometry : function(){
+        return this._geometry;
+    },
     set_geometry : function(x, y, w, h){
         this._geometry = new Rect(x, y, w, h);
     },
     scale : function(scale){
         self._rect.set_size(self._rect.width()*scale, self._rect.height()*scale);
+    },
+    alive : function(){
+        return this._stamina > 0;
     },
     update : function (post){
         /*
@@ -435,6 +552,9 @@ Frame.prototype = {
                 if (duration > 0 && CC_TABLE.hasOwnProperty(spell_id)){
                     this._control.push(new CrowdControl(spell_id, duration, type, CC_TABLE.spell_id));
                 }
+                else{
+                    this._auras.push(new Aura(spell_id, duration, type, this));
+                }
             }
         }
         // remove aura
@@ -448,6 +568,13 @@ Frame.prototype = {
                             this._control[i].kill();
                         }
                     }
+                }
+                else{
+                    this._auras.map(function (aura){
+                        if (aura.id() == spell_id){
+                            aura.kill();
+                        }
+                    });
                 }
             }
         }
@@ -552,16 +679,39 @@ Frame.prototype = {
 
 
         // draw combat text
-        for (var i = 0; i < this._combat_text.length; i++){
-            
-            if (this._combat_text[i].alive()){
-                this._combat_text[i].set_position(background_r.top_right());
-                this._combat_text[i].set_font_size(font_h);
-                this._combat_text[i].update(DELTA);
-                this._combat_text[i].draw(context);
+        this._combat_text.map(function (text){
+            if (text.alive()){
+                text.set_position(background_r.top_right());
+                text.set_font_size(font_h);
+                text.update(DELTA);
+                text.draw(context);
+            }
+        });
+
+        // draw auras
+        var aura_w = background_r.width()/MAX_AURA_NUMBER;
+        var offset_x = 0;
+        this._auras.reset();
+        for ( var i = 0; i < this._auras.size(); i++)
+        {
+            var aura = this._auras.next();
+            // tooltip
+            if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
+                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100));;
+            }
+            else{
+                this._tooltip = null;
+            }
+            if (aura.alive()){
+                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2, aura_w, aura_w))
+                aura.update(DELTA);
+                aura.draw(context);
+                if (this._tooltip !== null){
+                    this._tooltip.draw(context)
+                }
+                offset_x += aura_w + ICON_BORDER/2;
             }
         }
-
         context.restore();
     }
 }
@@ -645,6 +795,9 @@ $(document).ready(function () {
 
         line++;
         context.fillText(pprint('Time', format_time(TIME)), 0, size*line);
+
+        line++;
+        context.fillText(pprint('Speed', SPEED.toFixed(1)), 0, size*line);
         context.restore();
     }
 
@@ -702,6 +855,47 @@ $(document).ready(function () {
         // set title text
         $("#battle-title").text(json_data.teams['0'].name + '(' + json_data.teams['0'].mmr + ') vs ' + json_data.teams['1'].name + '(' + json_data.teams['1'].mmr + ')');
 
+        // focus canvas
+        $(canvas).on('mouseover mouseout', function(event){
+            if (event.type == 'mouseover'){
+                canvas.focus();
+            }
+            else if (event.type == 'mouseout'){
+                canvas.blur();
+            }
+        });
+
+        // keys
+        $(canvas).on('keydown', function(event){
+            if (event.keyCode == 32){ // space
+                PLAY = !PLAY;
+            }
+            else if (event.keyCode == 37){ // left arrow
+                TIME = Math.max(0, TIME -= 5000);
+                display();
+            }
+            else if (event.keyCode == 39){ // right arrow
+                TIME += 5000;
+                display();
+            }
+            else if (event.keyCode == 107){ // +
+                SPEED += 0.1;
+            }
+            else if (event.keyCode == 109){ // -
+                SPEED = Math.max(0, SPEED -= 0.1);
+            }
+            else if (event.keyCode == 96){ // 0
+                SPEED = 1.0;
+                PRINT = true;
+            }
+        });
+
+        // mousemove
+        $(canvas).on('mousemove', function(event){
+            MOUSE_X = event.offsetX;
+            MOUSE_Y = event.offsetY;
+        });
+
         if (json_data.combatans && json_data.combatans.dudes)
         {
             var index = 0; //counter
@@ -754,7 +948,9 @@ $(document).ready(function () {
         FPS += (1000/DELTA - FPS) / fps_filter;
         last_update = now;
 
-		display();
+        if (PLAY){
+            display();
+        }
 		requestAnimationFrame(animate);
 	}
 

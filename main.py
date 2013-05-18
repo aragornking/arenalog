@@ -309,6 +309,23 @@ def write_file(filename, data):
     with codecs.open(filename, 'w', 'UTF-8') as out:
         out.write(data)
 
+def write_spells_table():
+    root = os.path.dirname(__file__)
+
+    db = sqlite3.connect('history.db')
+    c = db.cursor()
+    c.execute('SELECT id, name, description FROM spell')
+    rows = c.fetchall();
+
+    data = ['var SPELLS_TABLE = {']
+    for row in rows:
+        data.append('    {id} : ["{name}", "{description}"],'.format(id = row[0], name = row[1], description = row[2].replace('\n', '')))
+    data.append('    -1 : ["foo", "none"] };')
+
+    db.close()
+
+    write_file(os.path.join(root, 'web', 'js', 'spells.js'), '\n'.join(data))
+
 def main():
     # TODO: optparse for different options
     root = os.path.dirname(__file__)
@@ -318,6 +335,7 @@ def main():
     db = sqlite3.connect('history.db')
     build_tables(db)
     update_data(db, os.path.join(root, 'web', 'data'), os.path.join(root, 'data', 'data.json'))
+    # close db
     db.close()
 
     j_loader = jinja2.Environment(loader = jinja2.FileSystemLoader(templates_dir), autoescape=True)
@@ -335,9 +353,10 @@ def main():
 
     template = j_loader.get_template('player.html')
     write_file(os.path.join(root, 'web', 'player.html'), template.render(data=None))
+
+    # spells
+    write_spells_table()
     
-    # close db
-    db.close()
 
 if __name__ == '__main__':
     main()

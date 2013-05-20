@@ -11,6 +11,200 @@ import json
 import os
 import sys
 
+CC_LIST = {
+    108194   : 4,
+    115001   : 4,
+    91800    : 4,
+    91797    : 4,
+    113801   : 4,
+    102795   : 4,
+    33786    : 4,
+    99       : 4,
+    2637     : 4,
+    22570    : 4,
+    5211     : 4,
+    9005     : 4,
+    102546   : 4,
+    110698   : 4,
+    113004   : 4,
+    113056   : 4,
+    117526   : 4,
+    3355     : 4,
+    1513     : 4,
+    19503    : 4,
+    19386    : 4,
+    90337    : 4,
+    24394    : 4,
+    126246   : 4,
+    126355   : 4,
+    126423   : 4,
+    50519    : 4,
+    56626    : 4,
+    96201    : 4,
+    118271   : 4,
+    44572    : 4,
+    31661    : 4,
+    118      : 4,
+    61305    : 4,
+    28272    : 4,
+    61721    : 4,
+    61780    : 4,
+    28271    : 4,
+    82691    : 4,
+    123393   : 4,
+    126451   : 4,
+    122242   : 4,
+    119392   : 4,
+    120086   : 4,
+    119381   : 4,
+    115078   : 4,
+    105421   : 4,
+    115752   : 4,
+    105593   : 4,
+    853      : 4,
+    119072   : 4,
+    20066    : 4,
+    10326    : 4,
+    113506   : 4,
+    605      : 4,
+    88625    : 4,
+    64044    : 4,
+    8122     : 4,
+    113792   : 4,
+    9484     : 4,
+    87204    : 4,
+    2094     : 4,
+    1833     : 4,
+    1776     : 4,
+    408      : 4,
+    113953   : 4,
+    6770     : 4,
+    76780    : 4,
+    77505    : 4,
+    51514    : 4,
+    118905   : 4,
+    710      : 4,
+    137143   : 4,
+    54786    : 4,
+    5782     : 4,
+    118699   : 4,
+    130616   : 4,
+    5484     : 4,
+    22703    : 4,
+    6789     : 4,
+    132412   : 4,
+    30283    : 4,
+    104045   : 4,
+    7922     : 4,
+    118895   : 4,
+    5246     : 4,
+    20511    : 4,
+    132168   : 4,
+    107570   : 4,
+    105771   : 4,
+    107079   : 4,
+    20549    : 4,
+    118345   : 4,
+    89766    : 4,
+    115268   : 4,
+    6358     : 4,
+
+    # Roots
+    96294    : 2,
+    91807    : 2,
+    339      : 2,
+    113770   : 2,
+    19975    : 2,
+    45334    : 2,
+    102359   : 2,
+    110693   : 2,
+    19185    : 2,
+    128405   : 2,
+    90327    : 2,
+    50245    : 2,
+    54706    : 2,
+    4167     : 2,
+    122      : 2,
+    111340   : 2,
+    33395    : 2,
+    116706   : 2,
+    113275   : 2,
+    123407   : 2,
+    113275   : 2,
+    87194    : 2,
+    114404   : 2,
+    115197   : 2,
+    64695    : 2,
+    63685    : 2,
+    107566   : 2,
+
+    # Silences
+    47476    : 3,
+    114238   : 3,
+    81261    : 3,
+    34490    : 3,
+    102051   : 3,
+    55021    : 3,
+    116709   : 3,
+    31935    : 3,
+    15487    : 3,
+    1330     : 3,
+    113287   : 3,
+    132409   : 3,
+    31117    : 3,
+    115782   : 3,
+    24259    : 3,
+    25046    : 3,
+    28730    : 3,
+    50613    : 3,
+    69179    : 3,
+    80483    : 3,
+    129597   : 3,
+            
+    # Disarms
+    126458   : 1,
+    50541    : 1,
+    91644    : 1,
+    117368   : 1,
+    64058    : 1,
+    51722    : 1,
+    118093   : 1,
+    676      : 1,
+                 
+    # Buffs
+    48792    : 1,
+    49039    : 1,
+    110575   : 1,
+    122291   : 1,
+    31821    : 1,
+    113002   : 1,
+    8178     : 1,
+    104773   : 1,
+    23920    : 1,
+    114028   : 1,
+    131557   : 1,
+    89485    : 1,
+    6940     : 1,
+    110913   : 1,
+
+    # Immunities
+    115018   : 1,
+    48707    : 1,
+    110617   : 1,
+    110715   : 1,
+    110700   : 1,
+    110696   : 1,
+    110570   : 1,
+    110788   : 1,
+    19263    : 1,
+    45438    : 1,
+    115760   : 1,
+    131523   : 1,
+    642      : 1,
+    47585    : 1,
+    31224    : 1,
+    46924    : 1 }
+
 def build_tables(db):
     c = db.cursor()
     # map
@@ -62,7 +256,9 @@ def build_tables(db):
                                                        "description" TEXT NOT NULL,
                                                        "range" TEXT NOT NULL,
                                                        "powercost" TEXT NOT NULL,
-                                                       "casttime" TEXT NOT NULL)''')
+                                                       "casttime" TEXT NOT NULL,
+                                                       "control" INTEGER NOT NULL DEFAULT 0,
+                                                       "priority" INTEGER NOT NULL DEFAULT 0)''')
     db.commit()
 
 def time_to_sql(timestamp):
@@ -147,9 +343,15 @@ def update_data(db, directory, datafile):
                             range = spell_info.get('range', '')
                             powercost = spell_info.get('powerCost', '')
                             casttime = spell_info.get('castTime')
+                            control = 0
+                            priority = 0
 
-                            c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime))
+                            if id in CC_LIST:
+                                control = 1
+                                priority = CC_LIST.get(id)
+
+                            c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
                             db.commit()
 
                 # insert new battle if we dont have it in the database
@@ -315,12 +517,19 @@ def write_spells_table():
     db = sqlite3.connect('history.db')
     c = db.cursor()
     c.execute('SELECT id, name, description FROM spell')
-    rows = c.fetchall();
+    rows = c.fetchall()
 
     data = ['var SPELLS_TABLE = {']
     for row in rows:
         data.append('    {id} : ["{name}", "{description}"],'.format(id = row[0], name = row[1], description = row[2].replace('\n', '')))
-    data.append('    -1 : ["foo", "none"] };')
+    data[-1] = data[-1][::-1].replace(',', '}', 1)[::-1]
+
+    c.execute('SELECT id, priority FROM spell WHERE spell.control == 1')
+    rows = c.fetchall()
+    data.append('var CC_TABLE = {')
+    for row in rows:
+        data.append('    {id} : {priority},'.format(id = row[0], priority = row[1]))
+    data[-1] = data[-1][::-1].replace(',', '}', 1)[::-1]
 
     db.close()
 

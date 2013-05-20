@@ -17,6 +17,8 @@ var MAX_AURA_NUMBER = 10;
 var MOUSE_X = 0;
 var MOUSE_Y = 0;
 var PLAY = true;
+var MAX_BUFFER_SIZE = 50;
+var BATTLE_END = false;
 
 function Buffer(maxsize){
     this._data = [];
@@ -54,27 +56,6 @@ Buffer.prototype = {
     }
 }
 
-function Tooltip(geometry, text){
-    this._geometry = geometry;
-    this._text = text;
-}
-
-Tooltip.prototype = {
-    geometry : function(){
-        return this._geometry;
-    },
-    draw : function(context){
-        //context.save();
-        //context.shadowOffsetX = 0;
-        //context.shadowOffsetY = 0;
-        //context.shadowBlur = 0;
-        //context.strokeStyle = 'black';
-        //context.lineWidth = 1;
-        //context.strokeRect(this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
-        //context.restore();
-    }
-}
-	
 function Point(x, y){
     x = typeof x !== 'undefined' ? x : 0;
     y = typeof y !== 'undefined' ? y : 0;
@@ -178,6 +159,80 @@ Rect.prototype = {
     }
 }
 
+function Cast(spellid, casttime, parent){
+    this._id = spellid;
+    this._geometry = new Rect();
+    this._casttime = casttime;
+    this._parent = parent !== 'undefined' ? parent : null;
+    this._spell_info = SPELLS_TABLE[this._id];
+    this._age = 0;
+}
+
+Cast.prototype = {
+    id : function(){
+        return this._id;
+    },
+    geometry : function(){
+        return this._geometry;
+    },
+    draw : function(context){
+        if (this.alive()){
+            var fsize = this.geometry().height() * 0.7;
+            var offset = (this.geometry().height() - fsize) * 0.5;
+
+            context.save();
+            context.font = fsize + "px Arial";
+            context.fillStyle = 'yellow';
+            context.fillRect(this.geometry().x(), this.geometry().y(), this.geometry().width()*(this._age / this._casttime), this.geometry().height())
+            context.fillStyle = 'black';
+            context.textBaseline = 'hanging';
+            context.fillText(this._spell_info[0], this.geometry().x(), this.geometry().y() + offset);
+            context.strokeStyle = 'white';
+            context.lineWidth = 3;
+            context.beginPath();
+            context.moveTo(this.geometry().x() + (this.geometry().width() * (this._age / this._casttime)), this.geometry().top());
+            context.lineTo(this.geometry().x() + (this.geometry().width() * (this._age / this._casttime)), this.geometry().bottom());
+            context.stroke();
+            context.restore();
+        }
+    },
+    update : function(delta){
+        this._age += delta;
+    },
+    alive : function(){
+        return this._age < this._casttime;
+    },
+    kill : function(){
+        this._age = Number.MAX_VALUE;
+    },
+    set_geometry : function(value){
+        this._geometry = value;
+    }
+}
+
+function Tooltip(geometry, spell_info){
+    this._geometry = geometry;
+    this._info = spell_info;
+}
+
+Tooltip.prototype = {
+    geometry : function(){
+        return this._geometry;
+    },
+    draw : function(context){
+        context.save();
+        context.shadowOffsetX = 0;
+        context.shadowOffsetY = 0;
+        context.shadowBlur = 0;
+        context.strokeStyle = 'black';
+        context.fillStyle = 'black';
+        context.lineWidth = 1;
+        context.fillText(this._info[0], this.geometry().x(), this.geometry().y());
+        context.restore();
+    }
+}
+	
+
 function Trinket(){
     this._icon = new Image();
     this._icon.src = 'img/icons/56/pvp_trinket.jpg';
@@ -210,8 +265,11 @@ Trinket.prototype = {
         context.shadowOffsetX = 0;
         context.shadowOffsetY = 0;
         context.shadowBlur = 0;
+        context.lineWidth = 1;
+        context.strokeStyle = 'black';
 
         context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.strokeRect(this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
         if (this.alive()){
             context.beginPath();
             context.moveTo(this.geometry().x(), this.geometry().y());
@@ -284,7 +342,7 @@ Aura.prototype = {
         context.shadowOffsetX = 0;
         context.shadowOffsetY = 0;
         context.shadowBlur = 0;
-        context.strokeStyle = 'black';
+        context.strokeStyle = this._type == 1 ? 'black' : 'red';
         context.lineWidth = 1;
 
         context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
@@ -326,6 +384,11 @@ CrowdControl.prototype = {
     },
     draw : function(context){
         context.save();
+
+        context.shadowOffsetX = 0;
+        context.shadowOffsetY = 0;
+        context.shadowBlur = 0;
+
         context.textAlign = 'center';
         context.textBaseline = 'middle';
         context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
@@ -417,9 +480,6 @@ CombatText.prototype = {
 function Frame(data){
     this._name = data.name;
     this._data = data;
-    this._buffs = [];
-    this._debuffs = [];
-    this._control = [];
     this._parent = null;
     this._geometry = new Rect();
     // icon image
@@ -429,6 +489,9 @@ function Frame(data){
     this._bar_image = new Image();
     this._bar_image.src = 'img/minimalist.png';
 
+    // cc list
+    this._control = [];
+
     // stamina
     this._stamina = this._data.starthpmax;
     this._maxstamina = this._data.starthpmax;
@@ -437,13 +500,16 @@ function Frame(data){
     this._power = POWER_TYPE[CLASS_MAP[this._data.class][3]][2] * 100;
 
     // aura buffer
-    this._auras = new Buffer(50);
+    this._auras = new Buffer(MAX_BUFFER_SIZE);
 
     // combat text buffer
-    this._combat_text = new Buffer(50);
+    this._combat_text = new Buffer(MAX_BUFFER_SIZE);
 
     // trinket
     this._trinket = new Trinket();
+
+    // cast bar
+    this._cast = null;
 
     // tooltip
     this._tooltip = null;
@@ -455,9 +521,6 @@ Frame.prototype = {
     },
     id : function (){
         return this._data.ID;
-    },
-    add_debuff : function (debuff){
-        this._debuffs.push(debuff);
     },
     translate : function(x, y){
         this._geometry.translate(x, y);
@@ -530,6 +593,7 @@ Frame.prototype = {
         // cast start
         else if(event_ == 9){
             if(parseInt(post[2]) == this.id()){
+                this._cast = new Cast(parseInt(post[4]), parseInt(post[5]))
             }
         }
         // spell success
@@ -541,6 +605,12 @@ Frame.prototype = {
                 if (spell_id == 59752 || spell_id == 42292){
                     this._trinket.pressed();
                 }
+            }
+        }
+        // spell interupt
+        else if(event_ == 12){
+            console.log(post);
+            if(parseInt(post[2]) == this.id()){
             }
         }
         // add aura
@@ -585,9 +655,12 @@ Frame.prototype = {
             }
         }
     },
-    draw : function (context){
+    draw : function (context, battle_end){
         context.save();
         context.translate(this._geometry.x(), this._geometry.y());
+        if (battle_end){
+            return;
+        }
 
         // calculate rectangles
         var ww = this._geometry.width() * FRAME_PADDING;
@@ -631,9 +704,15 @@ Frame.prototype = {
         context.globalAlpha = 1.0;
 
         // draw cast bar
+        if (this._cast !== null){
+            this._cast.set_geometry(cast_r);
+            this._cast.update(DELTA);
+            this._cast.draw(context);
+        }
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, cast_r.x(), cast_r.y(), cast_r.width(), cast_r.height());
         context.globalAlpha = 1.0;
+
 
         // init font
         var font_h = Math.round(stamina_r.height()/2);
@@ -697,7 +776,7 @@ Frame.prototype = {
             var aura = this._auras.next();
             // tooltip
             if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
-                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100));;
+                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100), SPELLS_TABLE[aura.id()]);;
             }
             else{
                 this._tooltip = null;
@@ -798,7 +877,11 @@ $(document).ready(function () {
 
         line++;
         context.fillText(pprint('Speed', SPEED.toFixed(1)), 0, size*line);
+
+        line++;
+        context.fillText(pprint('Tick', tick.toFixed(1)), 0, size*line);
         context.restore();
+
     }
 
     function display() {
@@ -809,8 +892,9 @@ $(document).ready(function () {
 
         while (true)
         {
-            if (tick >= json_data.data.length)
-                break;
+            if (tick >= json_data.data.length){
+                BATTLE_END = true; break;
+            }
             else{
                 post = json_data.data[tick].split(',');
                 if (!post || parseFloat(post[0]) >= (TIME/1000)){
@@ -827,7 +911,7 @@ $(document).ready(function () {
 
         // draw frames
         for (var i = 0; i < frames.length; i++) {
-            frames[i].draw(context);
+            frames[i].draw(context, BATTLE_END);
         }
 
         // overlay info
@@ -871,7 +955,7 @@ $(document).ready(function () {
                 PLAY = !PLAY;
             }
             else if (event.keyCode == 37){ // left arrow
-                TIME = Math.max(0, TIME -= 5000);
+                TIME = Math.max(0, TIME - 5000);
                 display();
             }
             else if (event.keyCode == 39){ // right arrow
@@ -882,11 +966,10 @@ $(document).ready(function () {
                 SPEED += 0.1;
             }
             else if (event.keyCode == 109){ // -
-                SPEED = Math.max(0, SPEED -= 0.1);
+                SPEED = Math.max(0, SPEED - 0.1);
             }
             else if (event.keyCode == 96){ // 0
                 SPEED = 1.0;
-                PRINT = true;
             }
         });
 
@@ -896,8 +979,7 @@ $(document).ready(function () {
             MOUSE_Y = event.offsetY;
         });
 
-        if (json_data.combatans && json_data.combatans.dudes)
-        {
+        if (json_data.combatans && json_data.combatans.dudes){
             var index = 0; //counter
             var xmin = xmax = 0;
             var ymin = ymax = 0;
@@ -908,11 +990,9 @@ $(document).ready(function () {
             var last_blue_y = 0;
 
             dudes = json_data.combatans.dudes
-            for (var key in dudes)
-            {
+            for (var key in dudes) {
                 dude = dudes[key];
-                if (dude.player)
-                {
+                if (dude.player) {
                     // calculate bbox
                     xmin = dude.team == 2 ? w_step : 0;
                     xmax = xmin + w_step;
@@ -920,13 +1000,11 @@ $(document).ready(function () {
                     // update names table
                     NAMES_TABLE[dude.ID] = dude.name;
 
-                    if (dude.team == 1)
-                    {
+                    if (dude.team == 1) {
                         ymin = last_red_y;
                         last_red_y += h_step;
                     }
-                    else
-                    {
+                    else {
                         ymin = last_blue_y;
                         last_blue_y += h_step;
                     }
@@ -955,9 +1033,7 @@ $(document).ready(function () {
 	}
 
     function main(){
-        $.getScript('js/constants.js', function(){
-            init();
-            animate();
-        });
+        init();
+        animate();
     }
 });

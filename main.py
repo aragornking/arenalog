@@ -277,6 +277,65 @@ def fetch_spell_data(spell_id):
             out_image.write(urllib2.urlopen(url).read())
     return spell_info
 
+def sync_spell(spell_id):
+    db = sqlite3.connect('history.db')
+    c = db.cursor()
+    c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
+    id = c.fetchone()
+    if id is not None:
+        pass
+    else:
+        spell_info = fetch_spell_data(spell_id)
+        id = int(spell_info.get('id'))
+        name = spell_info.get('name')
+        icon = spell_info.get('icon')
+        description = spell_info.get('description')
+        range = spell_info.get('range', '')
+        powercost = spell_info.get('powerCost', '')
+        casttime = spell_info.get('castTime')
+        control = 0
+        priority = 0
+
+        if id in CC_LIST:
+            control = 1
+            priority = CC_LIST.get(id)
+
+        c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
+        db.commit()
+    db.close()
+
+def sync_data():
+    root = os.path.dirname(__file__)
+    data_folder = os.path.join(root, 'web', 'data')
+    files = os.listdir(data_folder)
+    for file in files:
+        try:
+            with open (os.path.join(data_folder, file), 'r') as in_file:
+                data = json.load(in_file)
+                if data:
+                    combatans = data.get('combatans')
+                    if combatans is None:
+                        return
+                    dudes = combatans.get('dudes')
+                    if dudes is None:
+                        return
+                    combat_data = data.get('data')
+                    if combat_data is None:
+                        return
+
+                    for line in combat_data:
+                        tokens = line.split(',')
+                        type = int(tokens[1])
+
+                        if type in (9, 10, 12):
+                            sync_spell(int(tokens[4]))
+                        elif type == 13:
+                            sync_spell(int(tokens[3]))
+
+        except Exception as error:
+            sys.stdout.write('ERROR {0}\n'.format(error))
+
 def update_data(db, directory, datafile):
     battles = None
     if os.path.exists(datafile) and os.path.isfile(datafile):

@@ -212,7 +212,7 @@ Cast.prototype = {
 
 function Tooltip(geometry, spell_info){
     this._geometry = geometry;
-    this._info = spell_info;
+    this._info = spell_info ? spell_info : new Array('Unknown', 'This spell is not present in the spells table.');
 }
 
 Tooltip.prototype = {
@@ -604,6 +604,9 @@ Frame.prototype = {
                 var duration = parseInt(post[5]);
                 if (spell_id == 59752 || spell_id == 42292){
                     this._trinket.pressed();
+                }
+                if (this._cast !== null && spell_id == this._cast.id()){
+                    this._cast = null;
                 }
             }
         }
@@ -1021,12 +1024,12 @@ $(document).ready(function () {
 	}
 	
 	function animate(){
-        DELTA = ((now = new Date) - last_update) * SPEED;
-        TIME += DELTA;
-        FPS += (1000/DELTA - FPS) / fps_filter;
-        last_update = now;
-
         if (PLAY){
+            DELTA = ((now = new Date) - last_update) * SPEED;
+            TIME += DELTA;
+            FPS += (1000/DELTA - FPS) / fps_filter;
+            last_update = now;
+
             display();
         }
 		requestAnimationFrame(animate);

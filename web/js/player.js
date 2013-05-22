@@ -1024,14 +1024,13 @@ $(document).ready(function () {
 	}
 	
 	function animate(){
-        if (PLAY){
-            DELTA = ((now = new Date) - last_update) * SPEED;
-            TIME += DELTA;
-            FPS += (1000/DELTA - FPS) / fps_filter;
-            last_update = now;
+        SPEED = PLAY ? 1 : 0;
+        DELTA = ((now = new Date) - last_update) * SPEED;
+        TIME += DELTA;
+        FPS += (1000/DELTA - FPS) / fps_filter;
+        last_update = now;
 
-            display();
-        }
+        display();
 		requestAnimationFrame(animate);
 	}
 

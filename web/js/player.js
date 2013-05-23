@@ -658,12 +658,9 @@ Frame.prototype = {
             }
         }
     },
-    draw : function (context, battle_end){
+    draw : function (context){
         context.save();
         context.translate(this._geometry.x(), this._geometry.y());
-        if (battle_end){
-            return;
-        }
 
         // calculate rectangles
         var ww = this._geometry.width() * FRAME_PADDING;
@@ -914,7 +911,7 @@ $(document).ready(function () {
 
         // draw frames
         for (var i = 0; i < frames.length; i++) {
-            frames[i].draw(context, BATTLE_END);
+            frames[i].draw(context);
         }
 
         // overlay info
@@ -1024,13 +1021,14 @@ $(document).ready(function () {
 	}
 	
 	function animate(){
-        SPEED = PLAY ? 1 : 0;
-        DELTA = ((now = new Date) - last_update) * SPEED;
-        TIME += DELTA;
-        FPS += (1000/DELTA - FPS) / fps_filter;
-        last_update = now;
+        if (PLAY){
+            DELTA = ((now = new Date) - last_update) * SPEED;
+            TIME += DELTA;
+            FPS += (1000/DELTA - FPS) / fps_filter;
+            last_update = now;
 
-        display();
+            display();
+        }
 		requestAnimationFrame(animate);
 	}
 

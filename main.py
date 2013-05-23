@@ -267,14 +267,23 @@ def time_to_sql(timestamp):
     return time.strftime("%Y-%m-%d %H:%M:%S", in_date)
 
 def fetch_spell_data(spell_id):
+    spell_info = None
     img_dir = os.path.join(os.path.dirname(__file__), 'web', 'img', 'icons')
-    response = urllib2.urlopen('http://eu.battle.net/api/wow/spell/{id}'.format(id=spell_id))
-    spell_info = json.load(response)
-    for size in (18, 36, 56):
-        url = 'http://media.blizzard.com/wow/icons/{size}/{spell_name}.jpg'.format(size = size, spell_name = spell_info.get('icon'))
-        file = os.path.join(img_dir, str(size), '{0}.jpg'.format(spell_info.get('id')))
-        with open(file, 'wb') as out_image:
-            out_image.write(urllib2.urlopen(url).read())
+    try:
+        response = urllib2.urlopen('http://eu.battle.net/api/wow/spell/{id}'.format(id=spell_id))
+        spell_info = json.load(response)
+    except urllib2.URLError as error:
+        sys.stderr.write('URL Error: {0}. While reading info for spell {1}\n'.format(error, spell_id))
+
+    if spell_info is not None:
+        for size in (18, 36, 56):
+            url = 'http://media.blizzard.com/wow/icons/{size}/{spell_name}.jpg'.format(size = size, spell_name = spell_info.get('icon'))
+            file = os.path.join(img_dir, str(size), '{0}.jpg'.format(spell_info.get('id')))
+            with open(file, 'wb') as out_image:
+                try:
+                    out_image.write(urllib2.urlopen(url).read())
+                except urllib2.URLError as error:
+                    sys.stderr.write('URL Error: {0}. While downloading icon for spell {1}\n'.format(error, spell_id))
     return spell_info
 
 def sync_spell(spell_id):
@@ -286,23 +295,24 @@ def sync_spell(spell_id):
         pass
     else:
         spell_info = fetch_spell_data(spell_id)
-        id = int(spell_info.get('id'))
-        name = spell_info.get('name')
-        icon = spell_info.get('icon')
-        description = spell_info.get('description')
-        range = spell_info.get('range', '')
-        powercost = spell_info.get('powerCost', '')
-        casttime = spell_info.get('castTime')
-        control = 0
-        priority = 0
+        if spell_info is not None:
+            id = int(spell_info.get('id'))
+            name = spell_info.get('name')
+            icon = spell_info.get('icon')
+            description = spell_info.get('description')
+            range = spell_info.get('range', '')
+            powercost = spell_info.get('powerCost', '')
+            casttime = spell_info.get('castTime')
+            control = 0
+            priority = 0
 
-        if id in CC_LIST:
-            control = 1
-            priority = CC_LIST.get(id)
+            if id in CC_LIST:
+                control = 1
+                priority = CC_LIST.get(id)
 
-        c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
-        db.commit()
+            c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
+            db.commit()
     db.close()
 
 def sync_data():
@@ -389,29 +399,31 @@ def update_data(db, directory, datafile):
                             spell_id = int(tokens[4])
                         elif event == 13:
                             spell_id = int(tokens[3])
-                        c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
-                        id = c.fetchone()
-                        if id is not None:
-                            pass
-                        else:
-                            spell_info = fetch_spell_data(spell_id)
-                            id = int(spell_info.get('id'))
-                            name = spell_info.get('name')
-                            icon = spell_info.get('icon')
-                            description = spell_info.get('description')
-                            range = spell_info.get('range', '')
-                            powercost = spell_info.get('powerCost', '')
-                            casttime = spell_info.get('castTime')
-                            control = 0
-                            priority = 0
+                        if spell_id is not None:
+                            c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
+                            id = c.fetchone()
+                            if id is not None:
+                                pass
+                            else:
+                                spell_info = fetch_spell_data(spell_id)
+                                if spell_info is not None:
+                                    id = int(spell_info.get('id'))
+                                    name = spell_info.get('name')
+                                    icon = spell_info.get('icon')
+                                    description = spell_info.get('description')
+                                    range = spell_info.get('range', '')
+                                    powercost = spell_info.get('powerCost', '')
+                                    casttime = spell_info.get('castTime')
+                                    control = 0
+                                    priority = 0
 
-                            if id in CC_LIST:
-                                control = 1
-                                priority = CC_LIST.get(id)
+                                    if id in CC_LIST:
+                                        control = 1
+                                        priority = CC_LIST.get(id)
 
-                            c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
-                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
-                            db.commit()
+                                    c.execute('''INSERT INTO spell (id, name, icon, description, range, powercost, casttime, control, priority)
+                                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (id, name, icon, description, range, powercost, casttime, control, priority))
+                                    db.commit()
 
                 # insert new battle if we dont have it in the database
                 if battle_id is None:

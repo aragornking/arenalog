@@ -1,7 +1,7 @@
 "use strict";
-var CLASS_MAP = {'WARRIOR':['#C69B6D', 1, 'Warrior', 1], 'PALADIN':['#F48CBA', 2, 'Paladin', 0], 'HUNTER':['#AAD372', 3, 'Hunter', 2], 'ROGUE':['#FFF468', 4, 'Rogue', 3], 'PRIEST':['#FFFFFF', 5, 'Priest', 0], 'DEATHKNIGHT':['#C41E3A', 6, 'Death Knight', 6], 'SHAMAN':['#0070DD', 7, 'Shaman', 0], 'MAGE':['#68CCEF', 8, 'Mage', 0], 'WARLOCK':['#9482C9', 9, 'Warlock', 0], 'MONK':['#00FF96', 10, 'Monk', 3], 'DRUID':['#FF7C0A', 11, 'Druid', 99]};
+var CLASS_MAP = {'WARRIOR': ['#C69B6D', 1, 'Warrior', 1], 'PALADIN' : ['#F48CBA', 2, 'Paladin', 0], 'HUNTER' : ['#AAD372', 3, 'Hunter', 2], 'ROGUE': ['#FFF468', 4, 'Rogue', 3], 'PRIEST': ['#FFFFFF', 5, 'Priest', 0], 'DEATHKNIGHT': ['#C41E3A', 6, 'Death Knight', 6], 'SHAMAN': ['#0070DD', 7, 'Shaman', 0], 'MAGE': ['#68CCEF', 8, 'Mage', 0], 'WARLOCK': ['#9482C9', 9, 'Warlock', 0], 'MONK': ['#00FF96', 10, 'Monk', 3], 'DRUID': ['#FF7C0A', 11, 'Druid', 99]};
 var POWER_TYPE = {0 : ['MANA', '#0066CC', 1], 1 : ['RAGE', '#FF0000', 0], 2 : ['FOCUS', '#996633', 1], 3 : ['ENERGY', '#FFFF00', 1], 6 : ['RUNIC', '#336699', 0], 99 : ['UNDEFINED', '#444444', 0]};
-var NAMES_TABLE = new Object;
+var NAMES_TABLE = {};
 var FRAME_PADDING = 0.6;
 var FRAME_ASPECT = 0.286;
 var HEALTH_BAR_W_ASPECT = 0.78;
@@ -10,47 +10,44 @@ var ICON_BORDER = 4;
 var PLAYER_ASPECT = 1.77;
 var CRIT_MULTIPLYER = 2.2;
 var CRIT_SPEED = 0.05;
-var MAX_AURA_NUMBER = 10;
+var MAX_AURA_NUMBER = 12;
 var MOUSE_X = 0;
 var MOUSE_Y = 0;
-var PLAY = true;
 var MAX_BUFFER_SIZE = 50;
 
-function Buffer(maxsize){
+function Buffer(maxsize) {
     this._data = [];
     this._max = maxsize !== 'undefined' ? maxsize : Number.MAX_VALUE;
     this._index = 0;
 }
 
 Buffer.prototype = {
-    push : function(value){
+    push : function (value) {
         this._data.push(value);
-        if (this._data.length >= this._max){
+        if (this._data.length >= this._max) {
             this._data.shift();
         }
     },
-    size : function(){
+    size : function () {
         return this._data.length;
     },
-    next : function(){
-        if (this._index < this._data.length){
-            var result = this._data[this._index];
+    next : function () {
+		var result = null;
+        if (this._index < this._data.length) {
+            result = this._data[this._index];
             this._index++;
-            return result;
         }
-        else{
-            return null;
-        }
+		return result;
     },
-    reset : function(){
+    reset : function () {
         this._index = 0;
     },
-    map : function(callback){
+    map : function (callback) {
         for (var i = 0; i < this._data.length; i++){
             callback(this._data[i]);
         }
     }
-}
+};
 
 function Point(x, y){
     x = typeof x !== 'undefined' ? x : 0;
@@ -72,7 +69,7 @@ Point.prototype = {
     set_y : function(y){
         this._y = y;
     }
-}
+};
 
 function Rect(x, y, w, h){
     this._x = typeof x !== 'undefined' ? x : 0;
@@ -134,8 +131,8 @@ Rect.prototype = {
         return this._y;
     },
     set_size : function(w, h){
-        self._w = w;
-        self._h = h;
+        this._w = w;
+        this._h = h;
     },
     set_position : function(x, y){
         this._x = x;
@@ -153,7 +150,7 @@ Rect.prototype = {
     set_h : function(h){
         this._h = h;
     }
-}
+};
 
 function Cast(spellid, casttime, parent){
     this._id = spellid;
@@ -179,7 +176,7 @@ Cast.prototype = {
             context.save();
             context.font = fsize + "px Arial";
             context.fillStyle = 'yellow';
-            context.fillRect(this.geometry().x(), this.geometry().y(), this.geometry().width()*(this._age / this._casttime), this.geometry().height())
+            context.fillRect(this.geometry().x(), this.geometry().y(), this.geometry().width()*(this._age / this._casttime), this.geometry().height());
             context.fillStyle = 'black';
             context.textBaseline = 'hanging';
             context.fillText(this._spell_info[0], this.geometry().x(), this.geometry().y() + offset);
@@ -204,7 +201,7 @@ Cast.prototype = {
     set_geometry : function(value){
         this._geometry = value;
     }
-}
+};
 
 function Tooltip(geometry, spell_info){
     this._geometry = geometry;
@@ -226,7 +223,7 @@ Tooltip.prototype = {
         context.fillText(this._info[0], this.geometry().x(), this.geometry().y());
         context.restore();
     }
-}
+};
 
 function Trinket(){
     this._icon = new Image();
@@ -297,7 +294,7 @@ Trinket.prototype = {
     kill : function(){
         this._age = Number.MAX_VALUE;
     }
-}
+};
 
 function Aura(spellid, duration, type, parent){
     this._spellid = spellid;
@@ -353,7 +350,7 @@ Aura.prototype = {
     parent : function(){
         return this._parent;
     }
-}
+};
 
 function CrowdControl(spellid, duration, type, priority){
     this._spellid = spellid;
@@ -405,12 +402,12 @@ CrowdControl.prototype = {
     kill : function(){
         this._age = Number.MAX_VALUE;
     }
-}
+};
 
 function CombatText(s, critical, type){
     this._s = s;
     this._critical = critical;
-    this._position = new Point;
+    this._position = new Point();
     this._fsize = 12;
     this._fcritsize = this._fsize * CRIT_MULTIPLYER;
     this._speed = 0.05;
@@ -470,7 +467,7 @@ CombatText.prototype = {
     kill : function(){
         this._age = Number.MAX_VALUE;
     }
-}
+};
 
 function Frame(data){
     this._name = data.name;
@@ -479,7 +476,7 @@ function Frame(data){
     this._geometry = new Rect();
     // icon image
     this._icon_image = new Image();
-    this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data.class][1] + '.jpg';
+    this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data['class']][1] + '.jpg';
     // bar image
     this._bar_image = new Image();
     this._bar_image.src = 'img/minimalist.png';
@@ -492,7 +489,7 @@ function Frame(data){
     this._maxstamina = this._data.starthpmax;
 
     // power amount
-    this._power = POWER_TYPE[CLASS_MAP[this._data.class][3]][2] * 100;
+    this._power = POWER_TYPE[CLASS_MAP[this._data['class']][3]][2] * 100;
 
     // aura buffer
     this._auras = new Buffer(MAX_BUFFER_SIZE);
@@ -527,7 +524,7 @@ Frame.prototype = {
         this._geometry = new Rect(x, y, w, h);
     },
     scale : function(scale){
-        self._rect.set_size(self._rect.width()*scale, self._rect.height()*scale);
+        this._rect.set_size(this._rect.width()*scale, this._rect.height()*scale);
     },
     alive : function(){
         return this._stamina > 0;
@@ -553,50 +550,50 @@ Frame.prototype = {
         # event (18) ARENA_OPPONENT_UPDATE || time, event, id, 2(seen) or 1(unseen) or 3(destroyed) -->  unseed = lost track (stealth), destroyed = has left the arena
         */
 
-        var event_ = parseInt(post[1]);
+        var event_ = parseInt(post[1], 10);
 
         // current hp
         if (event_ == 1)
         {
-            if(parseInt(post[2]) == this.id())
-                this._stamina = (parseInt(post[3]));
+            if(parseInt(post[2], 10) == this.id())
+                this._stamina = (parseInt(post[3], 10));
         }
         // max hp
         else if (event_ == 2)
         {
-            if(parseInt(post[2]) == this.id())
-                this._maxstamina = (parseInt(post[3]));
+            if(parseInt(post[2], 10) == this.id())
+                this._maxstamina = (parseInt(post[3], 10));
         }
         // damage
         else if ([3, 4, 5, 6].indexOf(event_) !== -1)
         {
-            if(parseInt(post[3]) == this.id()){
+            if(parseInt(post[3], 10) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
-                var critical = parseInt(post[5]);
+                var critical = parseInt(post[5], 10);
                 this._combat_text.push(new CombatText(s, critical, 1));
             }
         }
         // healing
         else if ([7, 8].indexOf(event_) !== -1)
         {
-            if(parseInt(post[3]) == this.id()){
-                var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
-                var critical = parseInt(post[5]);
-                this._combat_text.push(new CombatText(s, critical, 2));
+            if(parseInt(post[3], 10) == this.id()){
+                var s0 = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
+                var critical0 = parseInt(post[5], 10);
+                this._combat_text.push(new CombatText(s0, critical0, 2));
             }
         }
         // cast start
         else if(event_ == 9){
-            if(parseInt(post[2]) == this.id()){
-                this._cast = new Cast(parseInt(post[4]), parseInt(post[5]));
+            if(parseInt(post[2], 10) == this.id()){
+                this._cast = new Cast(parseInt(post[4], 10), parseInt(post[5], 10));
             }
         }
         // spell success
         else if(event_ == 10){
-            if(parseInt(post[2]) == this.id()){
-                var target = parseInt(post[3]);
-                var spell_id = parseInt(post[4]);
-                var duration = parseInt(post[5]);
+            if(parseInt(post[2], 10) == this.id()){
+                var target = parseInt(post[3], 10);
+                var spell_id = parseInt(post[4], 10);
+                var duration = parseInt(post[5], 10);
                 if (spell_id == 59752 || spell_id == 42292){
                     this._trinket.pressed();
                 }
@@ -608,38 +605,37 @@ Frame.prototype = {
         // spell interupt
         else if(event_ == 12){
             console.log(post);
-            if(parseInt(post[2]) == this.id()){
+            if(parseInt(post[2], 10) == this.id()){
             }
         }
         // add aura
         else if(event_ == 13){
-            if(parseInt(post[2]) == this.id()){
-                var spell_id = parseInt(post[3]);
-                var type = parseInt(post[4]);
-                var duration = parseFloat(post[5]);
-                if (duration > 0 && CC_TABLE.hasOwnProperty(spell_id)){
-                    this._control.push(new CrowdControl(spell_id, duration, type, CC_TABLE.spell_id));
+            if(parseInt(post[2], 10) == this.id()){
+                var spell_id0 = parseInt(post[3], 10);
+                var type = parseInt(post[4], 10);
+                var duration0 = parseFloat(post[5]);
+                if (duration0 > 0 && CC_TABLE.hasOwnProperty(spell_id0)){
+                    this._control.push(new CrowdControl(spell_id0, duration0, type, CC_TABLE.spell_id0));
                 }
                 else{
-                    this._auras.push(new Aura(spell_id, duration, type, this));
+                    this._auras.push(new Aura(spell_id0, duration0, type, this));
                 }
             }
         }
         // remove aura
         else if(event_ == 14){
-            if(parseInt(post[2]) == this.id()){
-                var spell_id = parseInt(post[3]);
-                var type = parseInt(post[4]);
-                if (CC_TABLE.hasOwnProperty(spell_id)){
+            if(parseInt(post[2], 10) == this.id()){
+                var spell_id1 = parseInt(post[3], 10);
+                if (CC_TABLE.hasOwnProperty(spell_id1)){
                     for (var i = 0; i < this._control.length; i++){
-                        if (this._control[i].id() == spell_id){
+                        if (this._control[i].id() == spell_id1){
                             this._control[i].kill();
                         }
                     }
                 }
                 else{
                     this._auras.map(function (aura){
-                        if (aura.id() == spell_id){
+                        if (aura.id() == spell_id1){
                             aura.kill();
                         }
                     });
@@ -648,8 +644,8 @@ Frame.prototype = {
         }
         // unit power
         else if(event_ == 17){
-            if(parseInt(post[2]) == this.id()){
-                this._power = parseInt(post[3]);
+            if(parseInt(post[2], 10) == this.id()){
+                this._power = parseInt(post[3], 10);
             }
         }
     },
@@ -685,14 +681,14 @@ Frame.prototype = {
         context.drawImage(this._icon_image, icon_r.x(), icon_r.y(), icon_r.width(), icon_r.height());
 
         // draw stamina_r
-        context.fillStyle = CLASS_MAP[this._data.class][0];
+        context.fillStyle = CLASS_MAP[this._data['class']][0];
         context.fillRect(stamina_bar.x(), stamina_bar.y(), stamina_bar.width(), stamina_bar.height());
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, stamina_r.x(), stamina_r.y(), stamina_r.width(), stamina_r.height());
         context.globalAlpha = 1.0;
 
         // draw power
-        context.fillStyle = POWER_TYPE[CLASS_MAP[this._data.class][3]][1];
+        context.fillStyle = POWER_TYPE[CLASS_MAP[this._data['class']][3]][1];
         context.fillRect(power_bar.x(), power_bar.y(), power_bar.width(), power_bar.height());
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, power_r.x(), power_r.y(), power_r.width(), power_r.height());
@@ -733,7 +729,7 @@ Frame.prototype = {
         context.fillText(this._stamina, stamina_r.right() - context.measureText(this._data.starthpmax).width - font_offset, stamina_r.top() + font_offset);
 
         // draw cc
-        this._control.sort(function(a,b){return b.priority() - a.priority()});
+        this._control.sort(function(a,b){return b.priority() - a.priority();});
         for (var i = 0; i < this._control.length; i++){
             if (this._control[i].alive()){
                 this._control[i].set_geometry(icon_r);
@@ -743,9 +739,9 @@ Frame.prototype = {
         }
 
         // draw race class
-        var font_h = Math.round(power_r.height()/2);
+        font_h = Math.round(power_r.height()/2);
         context.font = font_h + 'px Arial';
-        context.fillText(this._data.race + ' ' + this._data.spec + ' ' + CLASS_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
+        context.fillText(this._data.race + ' ' + this._data.spec + ' ' + CLASS_MAP[this._data['class']][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
 
         // draw power value
         font_offset = (power_r.height() - font_h)/2;
@@ -763,10 +759,10 @@ Frame.prototype = {
         });
 
         // draw auras
-        var aura_w = background_r.width()/MAX_AURA_NUMBER;
+        var aura_w = ((background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2) - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
         var offset_x = 0;
         this._auras.reset();
-        for ( var i = 0; i < this._auras.size(); i++)
+        for ( var j = 0; j < this._auras.size(); j++)
         {
             var aura = this._auras.next();
             // tooltip
@@ -788,18 +784,18 @@ Frame.prototype = {
         }
         context.restore();
     }
-}
+};
 
 function rjust(s, width, fillchar){
-    return Array(width + 1 - s.length).join(fillchar) + s;
+    return new Array(width + 1 - s.length).join(fillchar) + s;
 }
 
 function ljust(s, width, fillchar){
-    return s + Array(width + 1 - s.length).join(fillchar);
+    return s + new Array(width + 1 - s.length).join(fillchar);
 }
 
 function get_url_parameter(name) {
-    return decodeURI((RegExp(name + '=' + '(.+?)(&|$)').exec(location.search) || [, null])[1]);
+    return decodeURI((new RegExp(name + '=' + '(.+?)(&|$)').exec(location.search) || [null])[1]);
 }
 
 function format_time(time){
@@ -853,7 +849,7 @@ return  window.requestAnimationFrame       ||  //Chromium
         window.msRequestAnimationFrame     || //IE Trident?
         function(callback, element){ //Fallback function
             window.setTimeout(callback, 1000/60);                
-        }
+        };
  
 })();
 
@@ -861,13 +857,13 @@ function preload(json, _callback){
     var spells = {};
     for (var i = 0; i < json.data.length; i++) {
         var tokens = json.data[i].split(',');
-        var type = parseInt(tokens[1]);
+        var type = parseInt(tokens[1], 10);
         var spell_id = null;
         if (type == 9 || type == 10 || type == 12){
-            spell_id = parseInt(tokens[4]);
+            spell_id = parseInt(tokens[4], 10);
         }
         else if (type == 13){
-            spell_id = parseInt(tokens[3]);
+            spell_id = parseInt(tokens[3], 10);
         }
 
         if (spell_id && !spells.hasOwnProperty(spell_id)){
@@ -877,10 +873,11 @@ function preload(json, _callback){
     //this._icon.src = 'img/icons/56/pvp_trinket.jpg';
     var t_images = Object.keys(spells).length;
     var l_images = 0;
+	var s_id = null;
 
-    for (spell_id in spells){
+    for (s_id in spells){
         var i_size = '18';
-        if (CC_TABLE.hasOwnProperty(spell_id)){
+        if (CC_TABLE.hasOwnProperty(s_id)){
             i_size = '56';
         }
         var img = new Image();
@@ -889,8 +886,8 @@ function preload(json, _callback){
             if (l_images == t_images){
                 _callback();
             }
-        }
-        img.src = 'img/icons/' + i_size + '/' + spell_id + '.jpg';
+        };
+        img.src = 'img/icons/' + i_size + '/' + s_id + '.jpg';
     }
 }
 
@@ -898,12 +895,14 @@ function Player(data){
     this._data = data;
     this._canvas = $("#arena-player");
     this._context = this._canvas.get(0).getContext('2d');
-    this._last_time = (new Date)*1 - 1;
+    this._last_time = (new Date())*1 - 1;
     this._time = 0;
     this._delta = 0;
     this._tick = 0;
     this._frames = [];
     this._speed = 1.0;
+	this._pause = false;
+	this._duration = this._data.elapsed * 1000.0;
 
     this._resize();
 
@@ -914,16 +913,46 @@ function Player(data){
 
 Player.prototype = {
     play : function(){
-        var now = new Date
-        this._delta = (now - this._last_time) * this._speed;
+        var now = new Date();
+        this._delta = (now - this._last_time) * (this._pause ? 0 : this._speed);
         this._time += this._delta;
         this._last_time = now;
-
+		
         this._display();
         requestAnimationFrame(this.play.bind(this));
     },
-    stop : function(){
+	replay : function(){
+		this._reset();
+		this.play();
+	},
+    pause : function(){
+		this._pause = !this._pause;
     },
+	seek : function(time){
+		this._last_time = (new Date())*1 - 1;
+		this._time = time;
+		this._delta = 0;
+		this._tick = 0;
+		this._frames = [];
+		
+		this._init();
+
+	},
+	time : function(){
+		return this._time;
+	},
+	duration : function(){
+		return this._duration;
+	},
+	_reset : function(){
+		this._last_time = (new Date())*1 - 1;
+		this._time = 0;
+		this._delta = 0;
+		this._tick = 0;
+		this._frames = [];
+		
+		this._init();
+	},
     _init : function(){
         if (this._data.combatans && this._data.combatans.dudes){
             var index = 0; //counter
@@ -937,7 +966,7 @@ Player.prototype = {
             var last_red_y = 0;
             var last_blue_y = 0;
 
-            var dudes = this._data.combatans.dudes
+            var dudes = this._data.combatans.dudes;
             for (var key in dudes) {
                 var dude = dudes[key];
                 if (dude.player) {
@@ -1001,8 +1030,8 @@ Player.prototype = {
         }
 
         // draw frames
-        for (var i = 0; i < this._frames.length; i++) {
-            this._frames[i].draw(this._context, this._delta);
+        for (var j = 0; j < this._frames.length; j++) {
+            this._frames[j].draw(this._context, this._delta);
         }
 
         // overlay info
@@ -1012,13 +1041,19 @@ Player.prototype = {
         // keys
         $(this._canvas).on('keydown', function(event){
             if (event.keyCode == 32){ // space
-                //pass
+				this.pause();
             }
+			else if (event.keyCode == 37 && event.ctrlKey){ // left arrow with Ctrl
+				this.seek(Math.max(0, this.time() - 5000));
+			}
             else if (event.keyCode == 37){ // left arrow
-                //pass
+				this.seek(Math.max(0, this.time() - 1000));
             }
+			else if (event.keyCode == 39 && event.ctrlKey){ // right arrow with Ctrl
+				this.seek(Math.min(this.duration(), this.time() + 5000));
+			}
             else if (event.keyCode == 39){ // right arrow
-                //pass
+				this.seek(Math.min(this.duration(), this.time() + 1000));
             }
             else if (event.keyCode == 107){ // +
                 this._speed += 0.1;
@@ -1047,10 +1082,15 @@ Player.prototype = {
             MOUSE_X = (event.offsetX || event.clientX - $(event.target).offset().left);
             MOUSE_Y = (event.offsetY || event.clientY - $(event.target).offset().top);
         });
-
-        // mousedown
+		
+		// double click
+		$(this._canvas).click(function(event){
+			if (event.ctrlKey) {
+				this.replay();
+			}
+		}.bind(this));
     }
-}
+};
 
 $(document).ready(function () {
     $.getJSON('data/' + get_url_parameter('id') + '.json', function (data) {

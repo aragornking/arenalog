@@ -208,7 +208,7 @@ CC_LIST = {
 def build_tables(db):
     c = db.cursor()
     # map
-    map_ = ((0, "None"), (1, "Nagrand Arena"), (2, "Ruins of Lordaeron"), (3, "Blade's Edge Arena"), (4, "Dalaran Arena"), (5, "The Ring of Valor"), (6, "Tol'viron Arena"))
+    map_ = ((0, "None"), (1, "Nagrand Arena"), (2, "Ruins of Lordaeron"), (3, "Blade's Edge Arena"), (4, "Dalaran Arena"), (5, "The Ring of Valor"), (6, "Tol'viron Arena"), (7, "The Tiger's Peak"))
     c.execute('''CREATE TABLE IF NOT EXISTS map ("id" INTEGER PRIMARY KEY UNIQUE, "name" TEXT NOT NULL)''')
     c.executemany('''INSERT OR IGNORE INTO map (id, name) VALUES   (?, ?)''', map_)
 
@@ -459,6 +459,8 @@ def update_data(db, directory, datafile):
                                 is_player = player.get('player', False)
                                 if is_player:
                                     class_ = player.get('class')
+                                    if class_ is None:
+                                        raise RuntimeError('Player record without class. Player ID = {0}'.format(id))
                                     c.execute('''SELECT id FROM class WHERE upper(replace(class.name, " ", "")) = ?''', (class_.upper(),))
                                     class_id = c.fetchone()
                                     if class_id is not None:
@@ -573,7 +575,6 @@ SELECT battle.id AS bid,
 def setup_index():
     data = collections.namedtuple('IndexContainer', ['date', 'num_records'])
     data.date = time.strftime("%A, %d %b %Y %H:%M:%S", time.gmtime())
-
     data.num_records = 20
 
     return data
@@ -615,7 +616,6 @@ def main():
     db = sqlite3.connect('history.db')
     build_tables(db)
     update_data(db, os.path.join(root, 'web', 'data'), os.path.join(root, 'data', 'data.json'))
-    # close db
     db.close()
 
     j_loader = jinja2.Environment(loader = jinja2.FileSystemLoader(templates_dir), autoescape=True)

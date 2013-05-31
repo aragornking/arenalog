@@ -1,3 +1,4 @@
+"use strict";
 var CLASS_MAP = {'WARRIOR':['#C69B6D', 1, 'Warrior', 1], 'PALADIN':['#F48CBA', 2, 'Paladin', 0], 'HUNTER':['#AAD372', 3, 'Hunter', 2], 'ROGUE':['#FFF468', 4, 'Rogue', 3], 'PRIEST':['#FFFFFF', 5, 'Priest', 0], 'DEATHKNIGHT':['#C41E3A', 6, 'Death Knight', 6], 'SHAMAN':['#0070DD', 7, 'Shaman', 0], 'MAGE':['#68CCEF', 8, 'Mage', 0], 'WARLOCK':['#9482C9', 9, 'Warlock', 0], 'MONK':['#00FF96', 10, 'Monk', 3], 'DRUID':['#FF7C0A', 11, 'Druid', 99]};
 var POWER_TYPE = {0 : ['MANA', '#0066CC', 1], 1 : ['RAGE', '#FF0000', 0], 2 : ['FOCUS', '#996633', 1], 3 : ['ENERGY', '#FFFF00', 1], 6 : ['RUNIC', '#336699', 0], 99 : ['UNDEFINED', '#444444', 0]};
 var NAMES_TABLE = new Object;
@@ -7,10 +8,6 @@ var HEALTH_BAR_W_ASPECT = 0.78;
 var HEALTH_BAR_H_ASPECT = 0.45;
 var ICON_BORDER = 4;
 var PLAYER_ASPECT = 1.77;
-var SPEED = 1.0;
-var FPS = 0;
-var DELTA = 0.0;
-var TIME = 0.0;
 var CRIT_MULTIPLYER = 2.2;
 var CRIT_SPEED = 0.05;
 var MAX_AURA_NUMBER = 10;
@@ -18,7 +15,6 @@ var MOUSE_X = 0;
 var MOUSE_Y = 0;
 var PLAY = true;
 var MAX_BUFFER_SIZE = 50;
-var BATTLE_END = false;
 
 function Buffer(maxsize){
     this._data = [];
@@ -38,7 +34,7 @@ Buffer.prototype = {
     },
     next : function(){
         if (this._index < this._data.length){
-            result = this._data[this._index];
+            var result = this._data[this._index];
             this._index++;
             return result;
         }
@@ -231,7 +227,6 @@ Tooltip.prototype = {
         context.restore();
     }
 }
-	
 
 function Trinket(){
     this._icon = new Image();
@@ -578,7 +573,7 @@ Frame.prototype = {
             if(parseInt(post[3]) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical = parseInt(post[5]);
-                this._combat_text.push(new CombatText(s, critical, 1))
+                this._combat_text.push(new CombatText(s, critical, 1));
             }
         }
         // healing
@@ -587,13 +582,13 @@ Frame.prototype = {
             if(parseInt(post[3]) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical = parseInt(post[5]);
-                this._combat_text.push(new CombatText(s, critical, 2))
+                this._combat_text.push(new CombatText(s, critical, 2));
             }
         }
         // cast start
         else if(event_ == 9){
             if(parseInt(post[2]) == this.id()){
-                this._cast = new Cast(parseInt(post[4]), parseInt(post[5]))
+                this._cast = new Cast(parseInt(post[4]), parseInt(post[5]));
             }
         }
         // spell success
@@ -658,7 +653,7 @@ Frame.prototype = {
             }
         }
     },
-    draw : function (context){
+    draw : function (context, delta){
         context.save();
         context.translate(this._geometry.x(), this._geometry.y());
 
@@ -697,7 +692,7 @@ Frame.prototype = {
         context.globalAlpha = 1.0;
 
         // draw power
-        context.fillStyle = POWER_TYPE[CLASS_MAP[this._data.class][3]][1]
+        context.fillStyle = POWER_TYPE[CLASS_MAP[this._data.class][3]][1];
         context.fillRect(power_bar.x(), power_bar.y(), power_bar.width(), power_bar.height());
         context.globalAlpha = 0.5;
         context.drawImage(this._bar_image, power_r.x(), power_r.y(), power_r.width(), power_r.height());
@@ -706,7 +701,7 @@ Frame.prototype = {
         // draw cast bar
         if (this._cast !== null){
             this._cast.set_geometry(cast_r);
-            this._cast.update(DELTA);
+            this._cast.update(delta);
             this._cast.draw(context);
         }
         context.globalAlpha = 0.5;
@@ -727,11 +722,11 @@ Frame.prototype = {
 
         // draw trinket
         this._trinket.set_geometry( new Rect(background_r.top_right().x() + ICON_BORDER/2, background_r.top_right().y(), background_r.height(), background_r.height()));
-        this._trinket.update(DELTA);
+        this._trinket.update(delta);
         this._trinket.draw(context);
 
         // draw name text
-        font_offset = (stamina_r.height() - font_h)/2;
+        var font_offset = (stamina_r.height() - font_h)/2;
         context.fillText(this._name, stamina_r.left() + font_offset, stamina_r.top() + font_offset);
 
         // draw hpoints text
@@ -742,7 +737,7 @@ Frame.prototype = {
         for (var i = 0; i < this._control.length; i++){
             if (this._control[i].alive()){
                 this._control[i].set_geometry(icon_r);
-                this._control[i].update(DELTA);
+                this._control[i].update(delta);
                 this._control[i].draw(context);
             }
         }
@@ -750,7 +745,7 @@ Frame.prototype = {
         // draw race class
         var font_h = Math.round(power_r.height()/2);
         context.font = font_h + 'px Arial';
-        context.fillText(this._data.race + ' ' + CLASS_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
+        context.fillText(this._data.race + ' ' + this._data.spec + ' ' + CLASS_MAP[this._data.class][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
 
         // draw power value
         font_offset = (power_r.height() - font_h)/2;
@@ -762,7 +757,7 @@ Frame.prototype = {
             if (text.alive()){
                 text.set_position(background_r.top_right());
                 text.set_font_size(font_h);
-                text.update(DELTA);
+                text.update(delta);
                 text.draw(context);
             }
         });
@@ -776,17 +771,17 @@ Frame.prototype = {
             var aura = this._auras.next();
             // tooltip
             if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
-                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100), SPELLS_TABLE[aura.id()]);;
+                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100), SPELLS_TABLE[aura.id()]);
             }
             else{
                 this._tooltip = null;
             }
             if (aura.alive()){
-                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2, aura_w, aura_w))
-                aura.update(DELTA);
+                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2, aura_w, aura_w));
+                aura.update(delta);
                 aura.draw(context);
                 if (this._tooltip !== null){
-                    this._tooltip.draw(context)
+                    this._tooltip.draw(context);
                 }
                 offset_x += aura_w + ICON_BORDER/2;
             }
@@ -809,189 +804,142 @@ function get_url_parameter(name) {
 
 function format_time(time){
     time = time / 1000;
-    var a = b = '0';
+    var a = '0';
+    var b = '0';
     if (Math.floor(time / 60) >= 10) a = '';
     if (Math.floor(time % 60) >= 10) b = '';
     return (a + Math.floor(time/60) + ':' + b + Math.floor(time % 60) + ',' + Math.floor(time % 60 * 10 % 10));
 }
 
-$(document).ready(function () {
-	// get json data
-	var json_data = null;
-	var id = get_url_parameter('id');
-	var data_url = 'data/' + id + '.json';
-	$.getJSON(data_url, function (data) {
-		json_data = data;
-        main();
-	});
+function draw_info(context, data){
+    var line = 0;
+    var size = 16;
+    var adjust_size = 14;
 
-	//globals
-    var canvas = $("#arena-player");
-    var context = canvas.get(0).getContext('2d');
-    var container = $(canvas).parent();
-    var frames = [];
-    var tick = 0;
+    var pprint = function(key, value){
+        return ljust(key, adjust_size, ' ') + ': ' + value;
+    };
 
-    var now = null;
-    var last_update = (new Date)*1 - 1;
-    var fps_filter = 50;
+    context.save();
 
-    function resize_canvas() {
-        canvas.attr('width', $(container).width());
-        canvas.attr('height', $(canvas).width() / PLAYER_ASPECT);
-    }
-	
-	function clear_canvas() {
-        context.save();
-        context.setTransform(1, 0, 0, 1, 0, 0);
-		context.clearRect(0, 0, $(canvas).width(), $(canvas).height());
-        context.restore();
-	}
+    // font 
+    context.textAlign = 'left';
+    context.textBaseline = 'hanging';
+    context.font = size + 'px monospace';
 
-    function draw_info(){
-        var line = 0;
-        var size = 16;
-        var adjust_size = 14;
+    //line++;
+    //context.fillText(pprint('FPS', data.fps, 0, size*line);
 
-        var pprint = function(key, value){
-            return ljust(key, adjust_size, ' ') + ': ' + value;
-        };
+    //line++;
+    //context.fillText(pprint('Elapsed', format_time(elapsed*1000)), 0, size*line);
 
-        context.save();
+    line++;
+    context.fillText(pprint('Time', format_time(data.time)), 0, size*line);
 
-        // font 
-        context.textAlign = 'left';
-        context.textBaseline = 'hanging';
-        context.font = size + 'px monospace';
+    line++;
+    context.fillText(pprint('Speed', data.speed.toFixed(1)), 0, size*line);
 
-        line++;
-        context.fillText(pprint('FPS', FPS.toFixed(1)), 0, size*line);
+    //line++;
+    //context.fillText(pprint('Tick', tick.toFixed(1)), 0, size*line);
+    context.restore();
 
-        line++;
-        var elapsed = 0.0;
-        if (json_data.data.length > tick) elapsed = json_data.data[tick].split(',')[0];
-        context.fillText(pprint('Elapsed', format_time(elapsed*1000)), 0, size*line);
+}
 
-        line++;
-        context.fillText(pprint('Time', format_time(TIME)), 0, size*line);
+window.requestAnimationFrame = (function(){
+return  window.requestAnimationFrame       ||  //Chromium 
+        window.webkitRequestAnimationFrame ||  //Webkit
+        window.mozRequestAnimationFrame    || //Mozilla Geko
+        window.oRequestAnimationFrame      || //Opera Presto
+        window.msRequestAnimationFrame     || //IE Trident?
+        function(callback, element){ //Fallback function
+            window.setTimeout(callback, 1000/60);                
+        }
+ 
+})();
 
-        line++;
-        context.fillText(pprint('Speed', SPEED.toFixed(1)), 0, size*line);
-
-        line++;
-        context.fillText(pprint('Tick', tick.toFixed(1)), 0, size*line);
-        context.restore();
-
-    }
-
-    function display() {
-        // clear
-        clear_canvas();
-
-        var post = null;
-
-        while (true)
-        {
-            if (tick >= json_data.data.length){
-                BATTLE_END = true; break;
-            }
-            else{
-                post = json_data.data[tick].split(',');
-                if (!post || parseFloat(post[0]) >= (TIME/1000)){
-                    break;
-                }
-                else{
-                    for (var i = 0; i < frames.length; i++) {
-                        frames[i].update(post);
-                    }
-                    tick++;
-                }
-            }
+function preload(json, _callback){
+    var spells = {};
+    for (var i = 0; i < json.data.length; i++) {
+        var tokens = json.data[i].split(',');
+        var type = parseInt(tokens[1]);
+        var spell_id = null;
+        if (type == 9 || type == 10 || type == 12){
+            spell_id = parseInt(tokens[4]);
+        }
+        else if (type == 13){
+            spell_id = parseInt(tokens[3]);
         }
 
-        // draw frames
-        for (var i = 0; i < frames.length; i++) {
-            frames[i].draw(context);
+        if (spell_id && !spells.hasOwnProperty(spell_id)){
+            spells[spell_id] = type;
         }
-
-        // overlay info
-        draw_info();
     }
-	
-	// window.requestAnimationFrame
-	window.requestAnimationFrame = (function(){
-    return  window.requestAnimationFrame       ||  //Chromium 
-            window.webkitRequestAnimationFrame ||  //Webkit
-            window.mozRequestAnimationFrame    || //Mozilla Geko
-            window.oRequestAnimationFrame      || //Opera Presto
-            window.msRequestAnimationFrame     || //IE Trident?
-            function(callback, element){ //Fallback function
-                window.setTimeout(callback, 1000/60);                
-            }
-     
-	})();
-	
-	function init(){
-		resize_canvas();
-        if (json_data == null)
-            return;
-        
-        // set title text
-        $("#battle-title").text(json_data.teams['0'].name + '(' + json_data.teams['0'].mmr + ') vs ' + json_data.teams['1'].name + '(' + json_data.teams['1'].mmr + ')');
+    //this._icon.src = 'img/icons/56/pvp_trinket.jpg';
+    var t_images = Object.keys(spells).length;
+    var l_images = 0;
 
-        // focus canvas
-        $(canvas).on('mouseover mouseout', function(event){
-            if (event.type == 'mouseover'){
-                canvas.focus();
+    for (spell_id in spells){
+        var i_size = '18';
+        if (CC_TABLE.hasOwnProperty(spell_id)){
+            i_size = '56';
+        }
+        var img = new Image();
+        img.onload = function(){
+            l_images++;
+            if (l_images == t_images){
+                _callback();
             }
-            else if (event.type == 'mouseout'){
-                canvas.blur();
-            }
-        });
+        }
+        img.src = 'img/icons/' + i_size + '/' + spell_id + '.jpg';
+    }
+}
 
-        // keys
-        $(canvas).on('keydown', function(event){
-            if (event.keyCode == 32){ // space
-                PLAY = !PLAY;
-            }
-            else if (event.keyCode == 37){ // left arrow
-                TIME = Math.max(0, TIME - 5000);
-                display();
-            }
-            else if (event.keyCode == 39){ // right arrow
-                TIME += 5000;
-                display();
-            }
-            else if (event.keyCode == 107){ // +
-                SPEED += 0.1;
-            }
-            else if (event.keyCode == 109){ // -
-                SPEED = Math.max(0, SPEED - 0.1);
-            }
-            else if (event.keyCode == 96){ // 0
-                SPEED = 1.0;
-            }
-        });
+function Player(data){
+    this._data = data;
+    this._canvas = $("#arena-player");
+    this._context = this._canvas.get(0).getContext('2d');
+    this._last_time = (new Date)*1 - 1;
+    this._time = 0;
+    this._delta = 0;
+    this._tick = 0;
+    this._frames = [];
+    this._speed = 1.0;
 
-        // mousemove
-        $(canvas).on('mousemove', function(event){
-            MOUSE_X = event.offsetX;
-            MOUSE_Y = event.offsetY;
-        });
+    this._resize();
 
-        if (json_data.combatans && json_data.combatans.dudes){
+    this._init();
+    this._keyboard();
+    this._mouse();
+}
+
+Player.prototype = {
+    play : function(){
+        var now = new Date
+        this._delta = (now - this._last_time) * this._speed;
+        this._time += this._delta;
+        this._last_time = now;
+
+        this._display();
+        requestAnimationFrame(this.play.bind(this));
+    },
+    stop : function(){
+    },
+    _init : function(){
+        if (this._data.combatans && this._data.combatans.dudes){
             var index = 0; //counter
-            var xmin = xmax = 0;
-            var ymin = ymax = 0;
-            var w_step = Math.round($(canvas).width()/2);
-            var h_step = Math.round($(canvas).height()/json_data.bracket);
+            var xmin = 0;
+            var xmax = 0;
+            var ymin = 0;
+            var ymax = 0;
+            var w_step = Math.round($(this._canvas).width()/2);
+            var h_step = Math.round($(this._canvas).height()/this._data.bracket);
 
             var last_red_y = 0;
             var last_blue_y = 0;
 
-            dudes = json_data.combatans.dudes
+            var dudes = this._data.combatans.dudes
             for (var key in dudes) {
-                dude = dudes[key];
+                var dude = dudes[key];
                 if (dude.player) {
                     // calculate bbox
                     xmin = dude.team == 2 ? w_step : 0;
@@ -1011,29 +959,105 @@ $(document).ready(function () {
                     ymax = ymin + h_step;
 
                     // init each frame
-                    d_frame = new Frame(dude);
+                    var d_frame = new Frame(dude);
                     d_frame.set_geometry(xmin, ymin, xmax - xmin, ymax - ymin);
-                    frames.push(d_frame);
+                    this._frames.push(d_frame);
                 }
                 index++;
             }
         }
-	}
-	
-	function animate(){
-        if (PLAY){
-            DELTA = ((now = new Date) - last_update) * SPEED;
-            TIME += DELTA;
-            FPS += (1000/DELTA - FPS) / fps_filter;
-            last_update = now;
+    },
+    _clear : function(){
+        this._context.save();
+        this._context.setTransform(1, 0, 0, 1, 0, 0);
+        this._context.clearRect(0, 0, $(this._canvas).width(), $(this._canvas).height());
+        this._context.restore();
+    },
+    _resize : function(){
+        this._canvas.attr('width', $(this._canvas).parent().width());
+        this._canvas.attr('height', $(this._canvas).width() / PLAYER_ASPECT);
+    },
+    _display : function(){
+        this._clear();
 
-            display();
+        var post = null;
+        while (true)
+        {
+            if (this._tick >= this._data.data.length){
+                break;
+            }
+            else{
+                post = this._data.data[this._tick].split(',');
+                if (!post || parseFloat(post[0]) >= (this._time/1000)){
+                    break;
+                }
+                else{
+                    for (var i = 0; i < this._frames.length; i++) {
+                        this._frames[i].update(post);
+                    }
+                    this._tick++;
+                }
+            }
         }
-		requestAnimationFrame(animate);
-	}
 
-    function main(){
-        init();
-        animate();
+        // draw frames
+        for (var i = 0; i < this._frames.length; i++) {
+            this._frames[i].draw(this._context, this._delta);
+        }
+
+        // overlay info
+        draw_info(this._context, {time : this._time, speed : this._speed});
+    },
+    _keyboard : function(){
+        // keys
+        $(this._canvas).on('keydown', function(event){
+            if (event.keyCode == 32){ // space
+                //pass
+            }
+            else if (event.keyCode == 37){ // left arrow
+                //pass
+            }
+            else if (event.keyCode == 39){ // right arrow
+                //pass
+            }
+            else if (event.keyCode == 107){ // +
+                this._speed += 0.1;
+            }
+            else if (event.keyCode == 109){ // -
+                this._speed = Math.max(0, this._speed - 0.1);
+            }
+            else if (event.keyCode == 96){ // 0
+                this._speed = 1.0;
+            }
+        }.bind(this));
+    },
+    _mouse : function(){
+        // focus canvas
+        $(this._canvas).on('mouseover mouseout', function(event){
+            if (event.type == 'mouseover'){
+                this.focus();
+            }
+            else if (event.type == 'mouseout'){
+                this.blur();
+            }
+        });
+
+        // mousemove
+        $(this._canvas).on('mousemove', function(event){
+            MOUSE_X = (event.offsetX || event.clientX - $(event.target).offset().left);
+            MOUSE_Y = (event.offsetY || event.clientY - $(event.target).offset().top);
+        });
+
+        // mousedown
     }
+}
+
+$(document).ready(function () {
+    $.getJSON('data/' + get_url_parameter('id') + '.json', function (data) {
+        $("#battle-title").text(data.teams['0'].name + '(' + data.teams['0'].mmr + ') vs ' + data.teams['1'].name + '(' + data.teams['1'].mmr + ')');
+        var player = new Player(data);
+        preload(data, function(){
+            player.play();
+        });
+    });
 });

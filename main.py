@@ -10,6 +10,7 @@ import codecs
 import json
 import os
 import sys
+import Image
 
 CC_LIST = {
     108194   : 4,
@@ -318,10 +319,12 @@ def sync_spell(spell_id):
 def sync_data():
     root = os.path.dirname(__file__)
     data_folder = os.path.join(root, 'web', 'data')
-    files = os.listdir(data_folder)
+    files = filter(lambda x: x.endswith('.json'), os.listdir(data_folder))
     for file in files:
         try:
-            with open (os.path.join(data_folder, file), 'r') as in_file:
+            filename = os.path.join(data_folder, file)
+            with open (filename, 'r') as in_file:
+                icons = set()
                 data = json.load(in_file)
                 if data:
                     combatans = data.get('combatans')
@@ -339,12 +342,45 @@ def sync_data():
                         type = int(tokens[1])
 
                         if type in (9, 10, 12):
-                            sync_spell(int(tokens[4]))
+                            spell_id = int(tokens[4])
+                            sync_spell(spell_id)
+                            icons.add(spell_id)
                         elif type == 13:
-                            sync_spell(int(tokens[3]))
-
+                            spell_id = int(tokens[3])
+                            sync_spell(spell_id)
+                            icons.add(spell_id)
+            write_sprite(filename.replace('.json', '.jpg'), icons)
         except Exception as error:
-            sys.stdout.write('ERROR {0}\n'.format(error))
+            sys.stdout.write('ERROR [sync_data] {0}\n'.format(error))
+
+def write_sprite(filename, icons):
+    icons_folder = os.path.join(os.path.dirname(__file__), 'web', 'img', 'icons', '18')
+    if icons:
+        spell_offset = {}
+        num_icons = len(icons)
+        sprite = Image.new('RGB', (num_icons*18, 18))
+        offset = 0
+        for icon in icons:
+            icon_image = Image.open(os.path.join(icons_folder, '{0}.jpg'.format(icon)))
+            sprite.paste(icon_image, (offset, 0))
+            spell_offset[icon] = offset
+            offset += 18
+        sprite.save(filename)
+
+        json_file = filename.replace('.jpg', '.json')
+        tmp_file = filename.replace('.jpg', '.tmp')
+        with open(json_file, 'r') as infile:
+            data = json.load(infile)
+            data['offset'] = spell_offset
+            try:
+                with open(tmp_file, 'w') as outfile:
+                    json.dump(data, outfile)
+            except Exception as error:
+                sys.stderr.write('ERROR {0}\n'.format(error))
+                os.unlink(tmp_file)
+                return
+        os.unlink(json_file)
+        os.rename(tmp_file, json_file)
 
 def update_data(db, directory, datafile):
     battles = None
@@ -358,6 +394,7 @@ def update_data(db, directory, datafile):
         if battles is not None:
             c = db.cursor()
             for battle in battles:
+                icons = set()
                 teams = battle.get('teams')
 
                 map_ = battle.get('map')
@@ -397,8 +434,10 @@ def update_data(db, directory, datafile):
                         event = int(tokens[1])
                         if event in (9, 10, 12):
                             spell_id = int(tokens[4])
+                            icons.add(spell_id)
                         elif event == 13:
                             spell_id = int(tokens[3])
+                            icons.add(spell_id)
                         if spell_id is not None:
                             c.execute('''SELECT id FROM spell WHERE spell.id = ?''', (spell_id, ))
                             id = c.fetchone()
@@ -488,6 +527,9 @@ def update_data(db, directory, datafile):
                         with open(filename, 'w') as o_file:
                             json.dump(battle, o_file)
                         db.commit()
+
+                        # create sprite and update json file
+                        write_sprite(filename.replace('.json', '.jpg'), icons)
                     except Exception as error:
                         db.rollback()
                         sys.stderr.write('ERROR: {0} on line {1}\n'.format(error, sys.exc_traceback.tb_lineno))
@@ -636,7 +678,6 @@ def main():
 
     # spells
     write_spells_table()
-    
 
 if __name__ == '__main__':
     main()

@@ -11,9 +11,10 @@ var PLAYER_ASPECT = 1.77;
 var CRIT_MULTIPLYER = 2.2;
 var CRIT_SPEED = 0.05;
 var MAX_AURA_NUMBER = 12;
-var MOUSE_X = 0;
-var MOUSE_Y = 0;
+var MOUSE_X = Number.MAX_VALUE;
+var MOUSE_Y = Number.MAX_VALUE;
 var MAX_BUFFER_SIZE = 50;
+var OFFSET = {};
 
 function Buffer(maxsize) {
     this._data = [];
@@ -300,7 +301,8 @@ function Aura(spellid, duration, type, parent){
     this._spellid = spellid;
     this._type = type;
     this._icon = new Image();
-    this._icon.src = 'img/icons/18/'+spellid+'.jpg';
+    this._icon.src = 'data/' + parent.fileid() + '.jpg';
+    this._offset = OFFSET[this._spellid];
     this._geometry = new Rect();
     this._age = 0;
     this._duration = duration*1000;
@@ -337,7 +339,7 @@ Aura.prototype = {
         context.strokeStyle = this._type == 1 ? 'black' : 'red';
         context.lineWidth = 1;
 
-        context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.drawImage(this.icon(), this._offset, 0, 18, 18, this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
         context.strokeRect(this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
         context.restore();
     },
@@ -469,11 +471,12 @@ CombatText.prototype = {
     }
 };
 
-function Frame(data){
+function Frame(data, parent){
     this._name = data.name;
     this._data = data;
     this._parent = null;
     this._geometry = new Rect();
+    this._parent = parent !== 'undefined' ? parent : null;
     // icon image
     this._icon_image = new Image();
     this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data['class']][1] + '.jpg';
@@ -511,8 +514,16 @@ Frame.prototype = {
     name : function (){
         return this._name;
     },
+    parent : function(){
+        return this._parent;
+    },
     id : function (){
         return this._data.ID;
+    },
+    fileid : function(){
+        if (this._parent != null){
+            return this._parent.id();
+        }
     },
     translate : function(x, y){
         this._geometry.translate(x, y);
@@ -824,9 +835,6 @@ function draw_info(context, data){
     context.font = size + 'px monospace';
 
     //line++;
-    //context.fillText(pprint('FPS', data.fps, 0, size*line);
-
-    //line++;
     //context.fillText(pprint('Elapsed', format_time(elapsed*1000)), 0, size*line);
 
     line++;
@@ -853,45 +861,33 @@ return  window.requestAnimationFrame       ||  //Chromium
  
 })();
 
-function preload(json, _callback){
-    var spells = {};
-    for (var i = 0; i < json.data.length; i++) {
-        var tokens = json.data[i].split(',');
-        var type = parseInt(tokens[1], 10);
-        var spell_id = null;
-        if (type == 9 || type == 10 || type == 12){
-            spell_id = parseInt(tokens[4], 10);
-        }
-        else if (type == 13){
-            spell_id = parseInt(tokens[3], 10);
-        }
+function preload(id, _callback){
+    var t_images = 12;
+    var l_images = 0;
 
-        if (spell_id && !spells.hasOwnProperty(spell_id)){
-            spells[spell_id] = type;
+    function f_onload(){
+        l_images++;
+        if (l_images == t_images){
+            _callback();
         }
     }
-    //this._icon.src = 'img/icons/56/pvp_trinket.jpg';
-    var t_images = Object.keys(spells).length;
-    var l_images = 0;
-	var s_id = null;
 
-    for (s_id in spells){
-        var i_size = '18';
-        if (CC_TABLE.hasOwnProperty(s_id)){
-            i_size = '56';
-        }
+    var img = new Image();
+    img.onload = f_onload;
+    img.src = 'data/' + id + '.jpg';
+
+    var img = new Image();
+    img.onload = f_onload;
+    img.src = 'img/icons/56/pvp_trinket.jpg';
+
+    for(var i = 1; i < 12; i++){
         var img = new Image();
-        img.onload = function(){
-            l_images++;
-            if (l_images == t_images){
-                _callback();
-            }
-        };
-        img.src = 'img/icons/' + i_size + '/' + s_id + '.jpg';
+        img.onload = f_onload;
+        img.src = 'img/icons/56/class_' + i + '.jpg';
     }
 }
 
-function Player(data){
+function Player(id, data){
     this._data = data;
     this._canvas = $("#arena-player");
     this._context = this._canvas.get(0).getContext('2d');
@@ -903,6 +899,7 @@ function Player(data){
     this._speed = 1.0;
 	this._pause = false;
 	this._duration = this._data.elapsed * 1000.0;
+    this._id = id;
 
     this._resize();
 
@@ -944,6 +941,12 @@ Player.prototype = {
 	duration : function(){
 		return this._duration;
 	},
+    id : function(){
+        return this._id;
+    },
+    canvas : function(){
+        return this._canvas;
+    },
 	_reset : function(){
 		this._last_time = (new Date())*1 - 1;
 		this._time = 0;
@@ -988,7 +991,7 @@ Player.prototype = {
                     ymax = ymin + h_step;
 
                     // init each frame
-                    var d_frame = new Frame(dude);
+                    var d_frame = new Frame(dude, this);
                     d_frame.set_geometry(xmin, ymin, xmax - xmin, ymax - ymin);
                     this._frames.push(d_frame);
                 }
@@ -1083,7 +1086,7 @@ Player.prototype = {
             MOUSE_Y = (event.offsetY || event.clientY - $(event.target).offset().top);
         });
 		
-		// double click
+		// Ctrl click
 		$(this._canvas).click(function(event){
 			if (event.ctrlKey) {
 				this.replay();
@@ -1093,10 +1096,12 @@ Player.prototype = {
 };
 
 $(document).ready(function () {
-    $.getJSON('data/' + get_url_parameter('id') + '.json', function (data) {
+    var id = get_url_parameter('id');
+    $.getJSON('data/' + id + '.json', function (data) {
         $("#battle-title").text(data.teams['0'].name + '(' + data.teams['0'].mmr + ') vs ' + data.teams['1'].name + '(' + data.teams['1'].mmr + ')');
-        var player = new Player(data);
-        preload(data, function(){
+        OFFSET = data.offset;
+        var player = new Player(id, data);
+        preload(id, function(){
             player.play();
         });
     });

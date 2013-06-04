@@ -11,6 +11,9 @@ import json
 import os
 import sys
 import Image
+import ImageFile
+
+ImageFile.MAXBLOCK = 2**20
 
 CC_LIST = {
     108194   : 4,
@@ -349,38 +352,50 @@ def sync_data():
                             spell_id = int(tokens[3])
                             sync_spell(spell_id)
                             icons.add(spell_id)
-            write_sprite(filename.replace('.json', '.jpg'), icons)
+            make_battle_sprite(filename.replace('.json', '.jpg'), icons)
         except Exception as error:
             sys.stdout.write('ERROR [sync_data] {0}\n'.format(error))
 
-def write_sprite(filename, icons):
-    icons_folder = os.path.join(os.path.dirname(__file__), 'web', 'img', 'icons', '18')
-    if icons:
-        spell_offset = {}
-        num_icons = len(icons)
-        sprite = Image.new('RGB', (num_icons*18, 18))
-        offset = 0
-        for icon in icons:
-            icon_image = Image.open(os.path.join(icons_folder, '{0}.jpg'.format(icon)))
-            sprite.paste(icon_image, (offset, 0))
-            spell_offset[icon] = offset
-            offset += 18
-        sprite.save(filename)
+def make_sprite(src_folder, images, o_filename):
+    image_offset = {}
+    image_array = []
 
-        json_file = filename.replace('.jpg', '.json')
-        tmp_file = filename.replace('.jpg', '.tmp')
-        with open(json_file, 'r') as infile:
-            data = json.load(infile)
-            data['offset'] = spell_offset
-            try:
-                with open(tmp_file, 'w') as outfile:
-                    json.dump(data, outfile)
-            except Exception as error:
-                sys.stderr.write('ERROR {0}\n'.format(error))
-                os.unlink(tmp_file)
-                return
-        os.unlink(json_file)
-        os.rename(tmp_file, json_file)
+    if images:
+        for image in images:
+            this_image = Image.open(os.path.join(src_folder, image))
+            image_array.append(this_image)
+
+        offset = 0
+        sprite = Image.new('RGB', (sum([x.size[0] for x in image_array]), max([x.size[1] for x in image_array])))
+        for image in image_array:
+            sprite.paste(image, (offset, 0))
+            name, extension = os.path.splitext(os.path.basename(image.filename))
+            image_offset[name] = offset
+            offset += image.size[0]
+        sprite.save(o_filename, 'JPEG', quality=65, optimize=True, progressive=True)
+
+    return image_offset
+
+def json_append(filename, key, value):
+    tmp_file = '{0}.tmp'.format(filename)
+    with open(filename, 'r') as infile:
+        data = json.load(infile)
+        data[key] = value
+        try:
+            with open(tmp_file, 'w') as outfile:
+                json.dump(data, outfile)
+        except Exception as error:
+            sys.stderr.write('ERROR {0}\n'.format(error))
+            os.unlink(tmp_file)
+            return
+    os.unlink(filename)
+    os.rename(tmp_file, filename)
+
+def make_battle_sprite(filename, icons):
+    icons_folder = os.path.join(os.path.dirname(__file__), 'web', 'img', 'icons', '18')
+    offset = make_sprite(icons_folder, map(lambda x : '{0}.jpg'.format(x), icons), filename)
+    json_file = filename.replace('.jpg', '.json')
+    json_append(json_file, 'offset', offset)
 
 def update_data(db, directory, datafile):
     battles = None
@@ -529,7 +544,7 @@ def update_data(db, directory, datafile):
                         db.commit()
 
                         # create sprite and update json file
-                        write_sprite(filename.replace('.json', '.jpg'), icons)
+                        make_battle_sprite(filename.replace('.json', '.jpg'), icons)
                     except Exception as error:
                         db.rollback()
                         sys.stderr.write('ERROR: {0} on line {1}\n'.format(error, sys.exc_traceback.tb_lineno))
@@ -628,6 +643,9 @@ def write_file(filename, data):
 def write_spells_table():
     root = os.path.dirname(__file__)
 
+    # make cc sprite
+    cc_offset = make_sprite(os.path.join(root, 'web', 'img', 'icons', '36'), map(lambda x : '{0}.jpg'.format(x), CC_LIST.keys()), os.path.join(root, 'web', 'img', 'cc.jpg'))
+
     db = sqlite3.connect('history.db')
     c = db.cursor()
     c.execute('SELECT id, name, description FROM spell')
@@ -642,7 +660,7 @@ def write_spells_table():
     rows = c.fetchall()
     data.append('var CC_TABLE = {')
     for row in rows:
-        data.append('    {id} : {priority},'.format(id = row[0], priority = row[1]))
+        data.append('    {id} : ["{priority}", "{offset}"],'.format(id = row[0], priority = row[1], offset = cc_offset.get(row[0])))
     data[-1] = data[-1][::-1].replace(',', '}', 1)[::-1]
 
     db.close()

@@ -13,6 +13,7 @@ var CRIT_SPEED = 0.05;
 var MAX_AURA_NUMBER = 12;
 var MOUSE_X = Number.MAX_VALUE;
 var MOUSE_Y = Number.MAX_VALUE;
+var KEY_SHIFT = false;
 var MAX_BUFFER_SIZE = 50;
 var OFFSET = {};
 
@@ -110,9 +111,6 @@ Rect.prototype = {
     width : function(){
         return this._w;
     },
-    set_width : function(value){
-        this._w = value;
-    },
     top_left : function(){
         return new Point(this.left(), this.top());
     },
@@ -145,10 +143,10 @@ Rect.prototype = {
     set_y : function(y){
         this._y = y;
     },
-    set_w : function(w){
-        this._w = w;
+    set_width : function(value){
+        this._w = value;
     },
-    set_h : function(h){
+    set_height : function(h){
         this._h = h;
     }
 };
@@ -221,7 +219,53 @@ Tooltip.prototype = {
         context.strokeStyle = 'black';
         context.fillStyle = 'black';
         context.lineWidth = 1;
-        context.fillText(this._info[0], this.geometry().x(), this.geometry().y());
+
+        if (KEY_SHIFT){
+            var match = new RegExp('([0-9]+)px .*').exec(context.font);
+            var fsize = parseInt(match[0], 10);
+            var space = context.measureText(' ').width;
+            var tab = space*2;
+
+            context.beginPath();
+            context.moveTo(this.geometry().x(), this.geometry().y() + fsize + ICON_BORDER);
+            context.lineTo(this.geometry().right(), this.geometry().y() + fsize + ICON_BORDER);
+            context.stroke();
+
+            // wrap text
+            var w = this._info[1].match(/\w+|"(?:\\"|[^"])+"/g);
+            var xx = this.geometry().x() + tab;
+            var yy = this.geometry().y() + fsize + ICON_BORDER*2;
+            var lines = [];
+
+            var line = []
+            while (w.length > 0){
+                line.push(w.shift());
+                var measure = context.measureText(line.join(' '));
+                if (measure.width * 1.3 >= this.geometry().width()){
+                    lines.push([line.join(' '), xx, yy]);
+                    yy += fsize + ICON_BORDER;
+                    line = [];
+                }
+            }
+            lines.push([line.join(' '), xx, yy]);
+            yy += fsize + ICON_BORDER;
+
+            this.geometry().set_height(yy - this.geometry().y());
+            context.globalAlpha = 0.7;
+            context.fillStyle = 'white';
+            context.fillRect(this.geometry().x(),this.geometry().y(),this.geometry().width(),this.geometry().height());
+            context.globalAlpha = 1.0;
+
+            context.fillStyle = 'black';
+            context.strokeRect(this.geometry().x(),this.geometry().y(),this.geometry().width(),this.geometry().height());
+            context.fillText(this._info[0], this.geometry().x() + tab, this.geometry().y());
+            for(var i = 0; i < lines.length; i++){
+                context.fillText(lines[i][0], lines[i][1], lines[i][2]);
+            }
+        }
+        else{
+            context.fillText(this._info[0], this.geometry().x(), this.geometry().y());
+        }
         context.restore();
     }
 };
@@ -354,16 +398,16 @@ Aura.prototype = {
     }
 };
 
-function CrowdControl(spellid, duration, type, priority){
+function CrowdControl(spellid, duration, type, options){
     this._spellid = spellid;
     this._type = type;
     this._age = 0;
     this._icon = new Image();
-    this._icon.src = 'img/icons/56/'+spellid+'.jpg';
+    this._icon.src = 'img/cc.jpg';
     this._duration = duration*1000;
-    this._priority = 1;
     this._geometry = new Rect();
-    this._priority = typeof priority !== 'undefined' ? priority : 1;
+    this._priority = typeof options !== 'undefined' ? options[0] : 1;
+    this._offset = options[1];
 }
 
 CrowdControl.prototype = {
@@ -385,7 +429,7 @@ CrowdControl.prototype = {
 
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        context.drawImage(this.icon(), this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
+        context.drawImage(this.icon(), this._offset, 0, 36, 36, this.geometry().x(), this.geometry().y(), this.geometry().width(), this.geometry().height());
         context.fillText(((this._duration - this._age)/1000).toFixed(1), this.geometry().center().x(), this.geometry().center().y());
         context.restore();
     },
@@ -615,8 +659,8 @@ Frame.prototype = {
         }
         // spell interupt
         else if(event_ == 12){
-            console.log(post);
             if(parseInt(post[2], 10) == this.id()){
+                console.log(this.name(), ' --> ', NAMES_TABLE[parseInt(post[3], 10)], ' INTERUPT (', SPELLS_TABLE[parseInt(post[4], 10)][0], ')');
             }
         }
         // add aura
@@ -626,7 +670,7 @@ Frame.prototype = {
                 var type = parseInt(post[4], 10);
                 var duration0 = parseFloat(post[5]);
                 if (duration0 > 0 && CC_TABLE.hasOwnProperty(spell_id0)){
-                    this._control.push(new CrowdControl(spell_id0, duration0, type, CC_TABLE.spell_id0));
+                    this._control.push(new CrowdControl(spell_id0, duration0, type, CC_TABLE[spell_id0]));
                 }
                 else{
                     this._auras.push(new Aura(spell_id0, duration0, type, this));
@@ -778,7 +822,7 @@ Frame.prototype = {
             var aura = this._auras.next();
             // tooltip
             if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
-                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), 100, 100), SPELLS_TABLE[aura.id()]);
+                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()]);
             }
             else{
                 this._tooltip = null;
@@ -862,7 +906,7 @@ return  window.requestAnimationFrame       ||  //Chromium
 })();
 
 function preload(id, _callback){
-    var t_images = 12;
+    var t_images = 13;
     var l_images = 0;
 
     function f_onload(){
@@ -879,6 +923,10 @@ function preload(id, _callback){
     var img = new Image();
     img.onload = f_onload;
     img.src = 'img/icons/56/pvp_trinket.jpg';
+
+    var img = new Image();
+    img.onload = f_onload;
+    img.src = 'img/cc.jpg';
 
     for(var i = 1; i < 12; i++){
         var img = new Image();
@@ -1033,7 +1081,7 @@ Player.prototype = {
         }
 
         // draw frames
-        for (var j = 0; j < this._frames.length; j++) {
+        for (var j = this._frames.length - 1; j >= 0; j--) {
             this._frames[j].draw(this._context, this._delta);
         }
 
@@ -1067,7 +1115,15 @@ Player.prototype = {
             else if (event.keyCode == 96){ // 0
                 this._speed = 1.0;
             }
+            else if (event.keyCode == 16){ // Shift
+                KEY_SHIFT = true;
+            }
         }.bind(this));
+        $(this._canvas).on('keyup', function(event){
+            if (event.keyCode == 16){ // Shift
+                KEY_SHIFT = false;
+            }
+        });
     },
     _mouse : function(){
         // focus canvas

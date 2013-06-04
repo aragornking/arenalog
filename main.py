@@ -660,7 +660,7 @@ def write_spells_table():
     rows = c.fetchall()
     data.append('var CC_TABLE = {')
     for row in rows:
-        data.append('    {id} : ["{priority}", "{offset}"],'.format(id = row[0], priority = row[1], offset = cc_offset.get(row[0])))
+        data.append('    {id} : [{priority}, {offset}],'.format(id = row[0], priority = row[1], offset = cc_offset.get(str(row[0]))))
     data[-1] = data[-1][::-1].replace(',', '}', 1)[::-1]
 
     db.close()

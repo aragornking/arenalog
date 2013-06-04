@@ -232,7 +232,7 @@ Tooltip.prototype = {
             context.stroke();
 
             // wrap text
-            var w = this._info[1].match(/\w+|"(?:\\"|[^"])+"/g);
+            var w = this._info[1].split(' ');
             var xx = this.geometry().x() + tab;
             var yy = this.geometry().y() + fsize + ICON_BORDER*2;
             var lines = [];

@@ -202,17 +202,25 @@ Cast.prototype = {
     }
 };
 
-function Tooltip(geometry, spell_info){
+function Tooltip(geometry, spell_info, parent){
     this._geometry = geometry;
     this._info = spell_info ? spell_info : new Array('Unknown', 'This spell is not present in the spells table.');
+    this._parent = parent || null;
 }
 
 Tooltip.prototype = {
     geometry : function(){
         return this._geometry;
     },
+    parent : function(){
+        return this._parent;
+    },
+    world_geometry : function(){
+        return new Rect(this.geometry().x() + this.parent().geometry().x(), this.geometry().y() + this.parent().geometry().y(), this.geometry().width(), this.geometry().height());
+    },
     draw : function(context){
         context.save();
+
         context.shadowOffsetX = 0;
         context.shadowOffsetY = 0;
         context.shadowBlur = 0;
@@ -237,7 +245,7 @@ Tooltip.prototype = {
             var yy = this.geometry().y() + fsize + ICON_BORDER*2;
             var lines = [];
 
-            var line = []
+            var line = [];
             while (w.length > 0){
                 line.push(w.shift());
                 var measure = context.measureText(line.join(' '));
@@ -250,8 +258,23 @@ Tooltip.prototype = {
             lines.push([line.join(' '), xx, yy]);
             yy += fsize + ICON_BORDER;
 
+            // adjust geometry to fit the text
             this.geometry().set_height(yy - this.geometry().y());
-            context.globalAlpha = 0.7;
+
+            var ww = $("#arena-player").width();
+            var hh = $("#arena-player").height();
+
+            /* TODO: flip tooltip
+            if ((this.world_geometry().x() + this.geometry().width()) >= ww){
+                this.geometry().translate(-this.geometry().width(), 0);
+            }
+
+            if ((this.world_geometry().y() + this.geometry().height()) >= hh){
+                this.geometry().translate(0, -this.geometry().height());
+            }
+            */
+
+            context.globalAlpha = 0.9;
             context.fillStyle = 'white';
             context.fillRect(this.geometry().x(),this.geometry().y(),this.geometry().width(),this.geometry().height());
             context.globalAlpha = 1.0;
@@ -565,7 +588,7 @@ Frame.prototype = {
         return this._data.ID;
     },
     fileid : function(){
-        if (this._parent != null){
+        if (this._parent !== null){
             return this._parent.id();
         }
     },
@@ -610,14 +633,16 @@ Frame.prototype = {
         // current hp
         if (event_ == 1)
         {
-            if(parseInt(post[2], 10) == this.id())
+            if(parseInt(post[2], 10) == this.id()){
                 this._stamina = (parseInt(post[3], 10));
+            }
         }
         // max hp
         else if (event_ == 2)
         {
-            if(parseInt(post[2], 10) == this.id())
+            if(parseInt(post[2], 10) == this.id()){
                 this._maxstamina = (parseInt(post[3], 10));
+            }
         }
         // damage
         else if ([3, 4, 5, 6].indexOf(event_) !== -1)
@@ -711,8 +736,10 @@ Frame.prototype = {
         // calculate rectangles
         var ww = this._geometry.width() * FRAME_PADDING;
         var hh = ww * FRAME_ASPECT;
-        var offset_w = (this._geometry.width()-ww)/2;
-        var offset_h = (this._geometry.height()-hh)/2;
+        var tt = hh;
+        var aa = ((ww + tt + ICON_BORDER/2) - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
+        var offset_w = Math.max(0, (this._geometry.width()-ww-tt)/2);
+        var offset_h = Math.max(0, (this._geometry.height()-hh-aa)/2);
 
         var background_r = new Rect(offset_w, offset_h, ww, hh);
         var icon_r = new Rect(background_r.x() + ICON_BORDER*0.5, background_r.y() + ICON_BORDER*0.5, background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT), background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT));
@@ -822,7 +849,7 @@ Frame.prototype = {
             var aura = this._auras.next();
             // tooltip
             if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
-                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()]);
+                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], this);
             }
             else{
                 this._tooltip = null;
@@ -847,6 +874,10 @@ function rjust(s, width, fillchar){
 
 function ljust(s, width, fillchar){
     return s + new Array(width + 1 - s.length).join(fillchar);
+}
+
+function number_to_currency(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 function get_url_parameter(name) {
@@ -935,6 +966,169 @@ function preload(id, _callback){
     }
 }
 
+function Statistic(data){
+    this._data = data;
+    this._canvas = $("#arena-statistics");
+    this._context = this._canvas.get(0).getContext('2d');
+
+    this._resize();
+
+    this._init();
+}
+
+Statistic.prototype = {
+    _resize : function(){
+        this._canvas.attr('width', $(this._canvas).parent().width());
+        this._canvas.attr('height', $(this._canvas).parent().height());
+    },
+    _init : function(){
+        var team1 = {};
+        var team2 = {};
+        var teams = {};
+        if (this._data.teams){
+            var t1 = this._data.teams["0"];
+            var t2 = this._data.teams["1"];
+
+            team1.mmr = t1.mmr;
+            team1.name = t1.name;
+            team1.rating = t1.rating;
+
+            team2.mmr = t2.mmr;
+            team2.name = t2.name;
+            team2.rating = t2.rating;
+        }
+        var players_team1 = [];
+        var players_team2 = [];
+        if (this._data.combatans && this._data.combatans.dudes){
+            var dudes = this._data.combatans.dudes;
+            for (var key in dudes) {
+                var dude = dudes[key];
+                if (dude.player) {
+                    if (dude.team == 1){
+                        players_team1.push([dude['class'], dude['name'], dude['ddone'], dude['hdone'], dude['hcrit']]);
+                    }else{
+                        players_team2.push([dude['class'], dude['name'], dude['ddone'], dude['hdone'], dude['hcrit']]);
+                    }
+                }
+            }
+        }
+        team1.players = players_team1;
+        team2.players = players_team2;
+        teams.team1 = team1;
+        teams.team2 = team2;
+
+        this._context.save();
+        var fsize = 24
+
+        this._context.font = fsize + 'px Arial';
+        this._context.fillStyle = 'black';
+        this._context.strokeStyle = 'black';
+        this._context.textBaseline = 'hanging';
+
+        var c_w = $(this._canvas).width();
+        var c_h = $(this._canvas).height();
+
+
+        var title = team1.name.toUpperCase() + ' vs ' + team2.name.toUpperCase();
+        var title_width = this._context.measureText(title).width;
+        var margin = c_w*0.05;
+        var spacing = 4;
+        var y_offset = margin + spacing + fsize;
+
+        // draw title
+        this._context.fillText(title, (c_w - title_width)/2, margin);
+        this._draw_line(margin, y_offset, c_w - margin, y_offset);
+        y_offset += margin/2;
+
+        // players
+        var c_x = margin;
+        var header = ['Icon', 'Name', 'Team', 'Damage Done', 'Healing Done', 'Max Crit']
+        for(var i = 0; i < header.length; i++){
+            var h = header[i];
+            var yof = y_offset;
+            var ccw = 0;
+            var x = null;
+            this._context.font = fsize*0.7 + 'px Arial';
+            this._context.textBaseline = 'middle';
+            for (x in teams){
+                for(var j = 0; j < teams[x].players.length; j++){
+                    var rect = new Rect(c_x, yof + spacing, c_w - margin*2, fsize);
+                    if (h.toLowerCase() == 'icon'){
+                        ccw = Math.max(ccw, this._draw_icon(teams[x].players[j], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                    else if (h.toLowerCase() == 'name'){
+                        ccw = Math.max(ccw, this._draw_name(teams[x].players[j], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                    else if (h.toLowerCase() == 'team'){
+                        ccw = Math.max(ccw, this._draw_team(teams[x], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                    else if (h.toLowerCase() == 'damage done'){
+                        ccw = Math.max(ccw, this._draw_ddone(teams[x].players[j], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                    else if (h.toLowerCase() == 'healing done'){
+                        ccw = Math.max(ccw, this._draw_hdone(teams[x].players[j], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                    else if (h.toLowerCase() == 'max crit'){
+                        ccw = Math.max(ccw, this._draw_crit(teams[x].players[j], rect, spacing));
+                        yof += fsize + spacing;
+                    }
+                }
+                yof += margin/4;
+            }
+            c_x = Math.max(c_x, ccw);
+        }
+
+        // duration
+        this._context.restore();
+    },
+    _draw_text : function(text, geometry, spacing){
+        this._context.fillText(text, geometry.x(), geometry.center().y());
+        return geometry.x() + this._context.measureText(text).width + spacing*10;
+    },
+    _draw_line : function(x0, y0, x1, y1){
+        this._context.beginPath();
+        this._context.moveTo(x0, y0);
+        this._context.lineTo(x1, y1);
+        this._context.stroke();
+    },
+    _draw_icon : function(player, geometry, spacing){
+        var icon = new Image();
+        icon.src = 'img/icons/56/class_' + CLASS_MAP[player[0]][1] + '.jpg';
+        this._context.drawImage(icon, geometry.x(), geometry.y(), geometry.height(), geometry.height());
+        return geometry.x() + geometry.height() + spacing*10;
+    },
+    _draw_name : function(player, geometry, spacing){
+        var text = player[1];
+        this._context.fillStyle = CLASS_MAP[player[0]][0];
+        return this._draw_text(text, geometry, spacing);
+    },
+    _draw_team : function(team, geometry, spacing){
+        var text = team.name;
+        this._context.fillStyle = 'black';
+        return this._draw_text(text, geometry, spacing);
+    },
+    _draw_ddone : function(player, geometry, spacing){
+        var text = number_to_currency(player[2]);
+        this._context.fillStyle = 'red';
+        return this._draw_text(text, geometry, spacing);
+    },
+    _draw_hdone : function(player, geometry, spacing){
+        var text = number_to_currency(player[3]);
+        this._context.fillStyle = 'green';
+        return this._draw_text(text, geometry, spacing);
+    },
+    _draw_crit : function(player, geometry, spacing){
+        var text = number_to_currency(player[4]);
+        this._context.fillStyle = 'gray';
+        return this._draw_text(text, geometry, spacing);
+    }
+};
+
 function Player(id, data){
     this._data = data;
     this._canvas = $("#arena-player");
@@ -1007,22 +1201,26 @@ Player.prototype = {
     _init : function(){
         if (this._data.combatans && this._data.combatans.dudes){
             var index = 0; //counter
+            var margin = 30;
             var xmin = 0;
             var xmax = 0;
             var ymin = 0;
             var ymax = 0;
-            var w_step = Math.round($(this._canvas).width()/2);
-            var h_step = Math.round($(this._canvas).height()/this._data.bracket);
+            var cw = $(this._canvas).width() - margin*2;
+            var ch = $(this._canvas).height() - margin*2;
 
-            var last_red_y = 0;
-            var last_blue_y = 0;
+            var w_step = Math.round(cw/2);
+            var h_step = Math.round(ch/this._data.bracket);
+
+            var last_red_y = margin;
+            var last_blue_y = margin;
 
             var dudes = this._data.combatans.dudes;
             for (var key in dudes) {
                 var dude = dudes[key];
                 if (dude.player) {
                     // calculate bbox
-                    xmin = dude.team == 2 ? w_step : 0;
+                    xmin = dude.team == 2 ? w_step + margin : margin;
                     xmax = xmin + w_step;
 
                     // update names table
@@ -1055,7 +1253,7 @@ Player.prototype = {
     },
     _resize : function(){
         this._canvas.attr('width', $(this._canvas).parent().width());
-        this._canvas.attr('height', $(this._canvas).width() / PLAYER_ASPECT);
+        this._canvas.attr('height', $(this._canvas).parent().height());
     },
     _display : function(){
         this._clear();
@@ -1118,7 +1316,11 @@ Player.prototype = {
             else if (event.keyCode == 16){ // Shift
                 KEY_SHIFT = true;
             }
+            else if (event.keyCode == 83){ // s
+                $("#player").toggleClass("flipped");
+            }
         }.bind(this));
+
         $(this._canvas).on('keyup', function(event){
             if (event.keyCode == 16){ // Shift
                 KEY_SHIFT = false;
@@ -1148,6 +1350,11 @@ Player.prototype = {
 				this.replay();
 			}
 		}.bind(this));
+
+        // double click
+        $("#player").dblclick(function(event){
+            $("#player").toggleClass("flipped");
+        });
     }
 };
 
@@ -1157,6 +1364,7 @@ $(document).ready(function () {
         $("#battle-title").text(data.teams['0'].name + '(' + data.teams['0'].mmr + ') vs ' + data.teams['1'].name + '(' + data.teams['1'].mmr + ')');
         OFFSET = data.offset;
         var player = new Player(id, data);
+        var statss = new Statistic(data);
         preload(id, function(){
             player.play();
         });

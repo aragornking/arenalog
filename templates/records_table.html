@@ -206,6 +206,12 @@
         $('#maintable').dataTable({
                 "sDom": "<'row'<'span6'l><'span6'f>r>t<'row'<'span6'i><'span6'p>>",
                 "bStateSave": true,
+                "fnStateSave": function (oSettings, oData){
+                    localStorage.setItem( 'DataTables_' + window.location.pathname, JSON.stringify(oData) );
+                },
+                "fnStateLoad": function (oSettings) {
+                    return JSON.parse( localStorage.getItem('DataTables_' + window.location.pathname) );
+                },
                 "sPaginationType": "bootstrap",
                 "bAutoWidth": false,
                 "oLanguage": {

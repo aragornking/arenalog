@@ -221,6 +221,10 @@ Tooltip.prototype = {
     draw : function(context){
         context.save();
 
+        context.font = '1em Arial';
+        context.textAlign = 'left';
+        context.textBaseline = 'hanging';
+
         context.shadowOffsetX = 0;
         context.shadowOffsetY = 0;
         context.shadowBlur = 0;
@@ -234,15 +238,10 @@ Tooltip.prototype = {
             var space = context.measureText(' ').width;
             var tab = space*2;
 
-            context.beginPath();
-            context.moveTo(this.geometry().x(), this.geometry().y() + fsize + ICON_BORDER);
-            context.lineTo(this.geometry().right(), this.geometry().y() + fsize + ICON_BORDER);
-            context.stroke();
-
             // wrap text
             var w = this._info[1].split(' ');
-            var xx = this.geometry().x() + tab;
-            var yy = this.geometry().y() + fsize + ICON_BORDER*2;
+            var xx = tab;
+            var yy = fsize + ICON_BORDER*2;
             var lines = [];
 
             var line = [];
@@ -259,12 +258,12 @@ Tooltip.prototype = {
             yy += fsize + ICON_BORDER;
 
             // adjust geometry to fit the text
-            this.geometry().set_height(yy - this.geometry().y());
+            this.geometry().set_height(yy);
 
             var ww = $("#arena-player").width();
             var hh = $("#arena-player").height();
 
-            /* TODO: flip tooltip
+            /* TODO: flip tooltip */
             if ((this.world_geometry().x() + this.geometry().width()) >= ww){
                 this.geometry().translate(-this.geometry().width(), 0);
             }
@@ -272,7 +271,11 @@ Tooltip.prototype = {
             if ((this.world_geometry().y() + this.geometry().height()) >= hh){
                 this.geometry().translate(0, -this.geometry().height());
             }
-            */
+
+            context.beginPath();
+            context.moveTo(this.geometry().x(), this.geometry().y() + fsize + ICON_BORDER);
+            context.lineTo(this.geometry().right(), this.geometry().y() + fsize + ICON_BORDER);
+            context.stroke();
 
             context.globalAlpha = 0.9;
             context.fillStyle = 'white';
@@ -283,7 +286,7 @@ Tooltip.prototype = {
             context.strokeRect(this.geometry().x(),this.geometry().y(),this.geometry().width(),this.geometry().height());
             context.fillText(this._info[0], this.geometry().x() + tab, this.geometry().y());
             for(var i = 0; i < lines.length; i++){
-                context.fillText(lines[i][0], lines[i][1], lines[i][2]);
+                context.fillText(lines[i][0], this.geometry().x() + lines[i][1], this.geometry().y() + lines[i][2]);
             }
         }
         else{
@@ -544,6 +547,7 @@ function Frame(data, parent){
     this._parent = null;
     this._geometry = new Rect();
     this._parent = parent !== 'undefined' ? parent : null;
+
     // icon image
     this._icon_image = new Image();
     this._icon_image.src = 'img/icons/56/class_' + CLASS_MAP[this._data['class']][1] + '.jpg';
@@ -729,6 +733,14 @@ Frame.prototype = {
             }
         }
     },
+    draw_tooltip : function(context){
+        context.save();
+        context.translate(this._geometry.x(), this._geometry.y());
+        if (this._tooltip !== null){
+            this._tooltip.draw(context);
+        }
+        context.restore();
+    },
     draw : function (context, delta){
         context.save();
         context.translate(this._geometry.x(), this._geometry.y());
@@ -841,28 +853,33 @@ Frame.prototype = {
         });
 
         // draw auras
-        var aura_w = ((background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2) - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
+        var frame_width = background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2
+        var aura_w = (frame_width - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
         var offset_x = 0;
+        var offset_y = 0;
+        var has_tooltip = false;
         this._auras.reset();
         for ( var j = 0; j < this._auras.size(); j++)
         {
             var aura = this._auras.next();
-            // tooltip
-            if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
-                this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], this);
-            }
-            else{
-                this._tooltip = null;
-            }
             if (aura.alive()){
-                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2, aura_w, aura_w));
+                // tooltip
+                if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
+                    has_tooltip = true;
+                    this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], this);
+                }
+                if (offset_x > frame_width){
+                    offset_x = 0;
+                    offset_y = aura_w + ICON_BORDER/2;
+                }
+                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2 + offset_y, aura_w, aura_w));
                 aura.update(delta);
                 aura.draw(context);
-                if (this._tooltip !== null){
-                    this._tooltip.draw(context);
-                }
                 offset_x += aura_w + ICON_BORDER/2;
             }
+        }
+        if (!has_tooltip){
+            this._tooltip = null;
         }
         context.restore();
     }
@@ -1279,8 +1296,13 @@ Player.prototype = {
         }
 
         // draw frames
-        for (var j = this._frames.length - 1; j >= 0; j--) {
+        for (var j = 0; j < this._frames.length; j++) {
             this._frames[j].draw(this._context, this._delta);
+        }
+
+        // overlay tooltips
+        for (var j = 0; j < this._frames.length; j++) {
+            this._frames[j].draw_tooltip(this._context);
         }
 
         // overlay info

@@ -202,9 +202,10 @@ Cast.prototype = {
     }
 };
 
-function Tooltip(geometry, spell_info, parent){
+function Tooltip(geometry, spell_info, font_size, parent){
     this._geometry = geometry;
     this._info = spell_info ? spell_info : new Array('Unknown', 'This spell is not present in the spells table.');
+	this._font_size = font_size || 16;
     this._parent = parent || null;
 }
 
@@ -221,7 +222,7 @@ Tooltip.prototype = {
     draw : function(context){
         context.save();
 
-        context.font = '1em Arial';
+        context.font = this._font_size + 'px Arial';
         context.textAlign = 'left';
         context.textBaseline = 'hanging';
 
@@ -233,15 +234,13 @@ Tooltip.prototype = {
         context.lineWidth = 1;
 
         if (KEY_SHIFT){
-            var match = new RegExp('([0-9]+)px .*').exec(context.font);
-            var fsize = parseInt(match[0], 10);
             var space = context.measureText(' ').width;
             var tab = space*2;
 
             // wrap text
             var w = this._info[1].split(' ');
             var xx = tab;
-            var yy = fsize + ICON_BORDER*2;
+            var yy = this._font_size + ICON_BORDER*2;
             var lines = [];
 
             var line = [];
@@ -250,12 +249,12 @@ Tooltip.prototype = {
                 var measure = context.measureText(line.join(' '));
                 if (measure.width * 1.3 >= this.geometry().width()){
                     lines.push([line.join(' '), xx, yy]);
-                    yy += fsize + ICON_BORDER;
+                    yy += this._font_size + ICON_BORDER;
                     line = [];
                 }
             }
             lines.push([line.join(' '), xx, yy]);
-            yy += fsize + ICON_BORDER;
+            yy += this._font_size + ICON_BORDER;
 
             // adjust geometry to fit the text
             this.geometry().set_height(yy);
@@ -273,8 +272,8 @@ Tooltip.prototype = {
             }
 
             context.beginPath();
-            context.moveTo(this.geometry().x(), this.geometry().y() + fsize + ICON_BORDER);
-            context.lineTo(this.geometry().right(), this.geometry().y() + fsize + ICON_BORDER);
+            context.moveTo(this.geometry().x(), this.geometry().y() + this._font_size + ICON_BORDER);
+            context.lineTo(this.geometry().right(), this.geometry().y() + this._font_size + ICON_BORDER);
             context.stroke();
 
             context.globalAlpha = 0.9;
@@ -853,7 +852,7 @@ Frame.prototype = {
         });
 
         // draw auras
-        var frame_width = background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2
+        var frame_width = background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2;
         var aura_w = (frame_width - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
         var offset_x = 0;
         var offset_y = 0;
@@ -866,7 +865,7 @@ Frame.prototype = {
                 // tooltip
                 if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
                     has_tooltip = true;
-                    this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], this);
+                    this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], font_h, this);
                 }
                 if (offset_x > frame_width){
                     offset_x = 0;
@@ -964,22 +963,22 @@ function preload(id, _callback){
         }
     }
 
-    var img = new Image();
-    img.onload = f_onload;
-    img.src = 'data/' + id + '.jpg';
+    var img0 = new Image();
+    img0.onload = f_onload;
+    img0.src = 'data/' + id + '.jpg';
 
-    var img = new Image();
-    img.onload = f_onload;
-    img.src = 'img/icons/56/pvp_trinket.jpg';
+    var img1 = new Image();
+    img1.onload = f_onload;
+    img1.src = 'img/icons/56/pvp_trinket.jpg';
 
-    var img = new Image();
-    img.onload = f_onload;
-    img.src = 'img/cc.jpg';
+    var img2 = new Image();
+    img2.onload = f_onload;
+    img2.src = 'img/cc.jpg';
 
     for(var i = 1; i < 12; i++){
-        var img = new Image();
-        img.onload = f_onload;
-        img.src = 'img/icons/56/class_' + i + '.jpg';
+        var cimg = new Image();
+        cimg.onload = f_onload;
+        cimg.src = 'img/icons/56/class_' + i + '.jpg';
     }
 }
 
@@ -1022,9 +1021,9 @@ Statistic.prototype = {
                 var dude = dudes[key];
                 if (dude.player) {
                     if (dude.team == 1){
-                        players_team1.push([dude['class'], dude['name'], dude['ddone'], dude['hdone'], dude['hcrit']]);
+                        players_team1.push([dude['class'], dude.name, dude.ddone, dude.hdone, dude.hcrit]);
                     }else{
-                        players_team2.push([dude['class'], dude['name'], dude['ddone'], dude['hdone'], dude['hcrit']]);
+                        players_team2.push([dude['class'], dude.name, dude.ddone, dude.hdone, dude.hcrit]);
                     }
                 }
             }
@@ -1035,7 +1034,7 @@ Statistic.prototype = {
         teams.team2 = team2;
 
         this._context.save();
-        var fsize = 24
+        var fsize = 24;
 
         this._context.font = fsize + 'px Arial';
         this._context.fillStyle = 'black';
@@ -1059,7 +1058,7 @@ Statistic.prototype = {
 
         // players
         var c_x = margin;
-        var header = ['Icon', 'Name', 'Team', 'Damage Done', 'Healing Done', 'Max Crit']
+        var header = ['Icon', 'Name', 'Team', 'Damage Done', 'Healing Done', 'Max Crit'];
         for(var i = 0; i < header.length; i++){
             var h = header[i];
             var yof = y_offset;
@@ -1301,8 +1300,8 @@ Player.prototype = {
         }
 
         // overlay tooltips
-        for (var j = 0; j < this._frames.length; j++) {
-            this._frames[j].draw_tooltip(this._context);
+        for (var k = 0; k < this._frames.length; k++) {
+            this._frames[k].draw_tooltip(this._context);
         }
 
         // overlay info
@@ -1311,6 +1310,7 @@ Player.prototype = {
     _keyboard : function(){
         // keys
         $(this._canvas).on('keydown', function(event){
+			console.log(event.keyCode);
             if (event.keyCode == 32){ // space
 				this.pause();
             }
@@ -1326,10 +1326,10 @@ Player.prototype = {
             else if (event.keyCode == 39){ // right arrow
 				this.seek(Math.min(this.duration(), this.time() + 1000));
             }
-            else if (event.keyCode == 107){ // +
+            else if (event.keyCode == 107 || event.keyCode == 187){ // +
                 this._speed += 0.1;
             }
-            else if (event.keyCode == 109){ // -
+            else if (event.keyCode == 109 || event.keyCode == 189){ // -
                 this._speed = Math.max(0, this._speed - 0.1);
             }
             else if (event.keyCode == 96){ // 0

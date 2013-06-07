@@ -495,11 +495,11 @@ function CombatText(s, critical, type, position, parent){
     this._start_position = new Point(position.x(), position.y());
     this._fsize = 16;
     this._fcritsize = this._fsize * CRIT_MULTIPLYER;
-    this._speed = 0.05;
+    this._speed = 0.09;
     this._type = type;
     this._color = type == 1 ? 'red' : 'green';
     this._age = 0;
-    this._fadetime = 1500; //miliseconds
+    this._fadetime = 1200; //miliseconds
     this._parent = parent;
     this._additions = 1;
 }

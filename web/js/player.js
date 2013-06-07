@@ -15,6 +15,7 @@ var MOUSE_X = Number.MAX_VALUE;
 var MOUSE_Y = Number.MAX_VALUE;
 var KEY_SHIFT = false;
 var MAX_BUFFER_SIZE = 50;
+var GROUP_COMBAT_TEXT = false;
 var OFFSET = {};
 
 function Buffer(maxsize) {
@@ -70,6 +71,14 @@ Point.prototype = {
     },
     set_y : function(y){
         this._y = y;
+    },
+    add : function(x, y) {
+        this._x += x;
+        this._y += y;
+    },
+    sub : function(x, y) {
+        this._x -= x;
+        this._y -= y;
     }
 };
 
@@ -151,9 +160,9 @@ Rect.prototype = {
     }
 };
 
-function Cast(spellid, casttime, parent){
+function Cast(spellid, casttime, geometry, parent){
     this._id = spellid;
-    this._geometry = new Rect();
+    this._geometry = geometry || new Rect();
     this._casttime = casttime;
     this._parent = parent !== 'undefined' ? parent : null;
     this._spell_info = SPELLS_TABLE[this._id];
@@ -295,10 +304,10 @@ Tooltip.prototype = {
     }
 };
 
-function Trinket(){
+function Trinket(geometry){
     this._icon = new Image();
     this._icon.src = 'img/icons/56/pvp_trinket.jpg';
-    this._geometry = new Rect();
+    this._geometry = geometry || new Rect();
     this._duration = 120000; // 2 min
     this._age = Number.MAX_VALUE; // more than duration
 }
@@ -423,14 +432,15 @@ Aura.prototype = {
     }
 };
 
-function CrowdControl(spellid, duration, type, options){
+function CrowdControl(spellid, duration, type, options, geometry, parent){
     this._spellid = spellid;
     this._type = type;
     this._age = 0;
     this._icon = new Image();
     this._icon.src = 'img/cc.jpg';
     this._duration = duration*1000;
-    this._geometry = new Rect();
+    this._geometry = geometry || new Rect();
+    this._parent = parent || null;
     this._priority = typeof options !== 'undefined' ? options[0] : 1;
     this._offset = options[1];
 }
@@ -461,6 +471,9 @@ CrowdControl.prototype = {
     geometry : function(){
         return this._geometry;
     },
+    parent : function(){
+        return this._parent;
+    },
     set_geometry : function(value){
         this._geometry = value;
     },
@@ -475,18 +488,20 @@ CrowdControl.prototype = {
     }
 };
 
-function CombatText(s, critical, type){
+function CombatText(s, critical, type, position, parent){
     this._s = s;
     this._critical = critical;
-    this._position = new Point();
-    this._fsize = 12;
+    this._position = position || new Point();
+    this._start_position = new Point(position.x(), position.y());
+    this._fsize = 16;
     this._fcritsize = this._fsize * CRIT_MULTIPLYER;
     this._speed = 0.05;
     this._type = type;
     this._color = type == 1 ? 'red' : 'green';
     this._age = 0;
-    this._fadetime = 2500; //miliseconds
-    this._offset_y = 0;
+    this._fadetime = 1500; //miliseconds
+    this._parent = parent;
+    this._additions = 1;
 }
 
 CombatText.prototype = {
@@ -498,6 +513,7 @@ CombatText.prototype = {
             context.shadowOffsetY = 0;
             context.shadowBlur = 0;
             context.textAlign = 'center';
+            context.textBaseline = 'bottom';
 
             if (this._critical){
                 context.font = 'bold ' + this._fcritsize + 'px monospace';
@@ -506,16 +522,40 @@ CombatText.prototype = {
                 context.font = this._fsize + 'px monospace';
             }
 
-            context.globalAlpha = this._age > this._fadetime ? 0 : 1.0 - (this._age / this._fadetime);
+            context.globalAlpha = this._age > this._fadetime ? 0 : 1.0 - this._age / this._fadetime;
             context.fillStyle = this._color;
-            context.fillText(this._s, this._position.x(), this._position.y() - this._offset_y);
+            context.fillText(this._s, this._position.x(), this._position.y());
             context.restore();
         }
     },
     update : function(delta){
         this._age += delta;
-        this._offset_y += this._speed * delta;
+        this._position.sub(0, this._speed * delta);
         this._fcritsize = this._fcritsize > this._fsize ? this._fcritsize - CRIT_SPEED*delta : this._fsize;
+    },
+    add : function(other){
+        this._additions++;
+        var tokens_a = this.value().split('(');
+        var tokens_b = other.value().split('(');
+        var amount = parseInt(tokens_a[0], 10) + parseInt(tokens_b[0], 10);
+        if (tokens_a[1] == tokens_b[1]){
+            this._s = amount + '(' + tokens_a[1] + 'X' + this._additions;
+        }
+        else{
+            this._s = amount + '(Multiple)X' + this._additions;
+        }
+    },
+    value : function(){
+        return this._s;
+    },
+    font : function(){
+        return this._fsize;
+    },
+    position : function(){
+        return this._position;
+    },
+    distance_y : function(){
+        return this._start_position.y() - this._position.y();
     },
     set_position : function(position){
         this._position = position;
@@ -529,6 +569,9 @@ CombatText.prototype = {
     age : function(){
         return this._age;
     },
+    type : function(){
+        return this._type;
+    },
     set_fadetime : function(value){
         this._fadetime = value;
     },
@@ -540,12 +583,27 @@ CombatText.prototype = {
     }
 };
 
-function Frame(data, parent){
+function Frame(data, geometry, parent){
     this._name = data.name;
     this._data = data;
     this._parent = null;
-    this._geometry = new Rect();
+    this._geometry = geometry || new Rect();
     this._parent = parent !== 'undefined' ? parent : null;
+
+    // calculate rectangles
+    var ww = this._geometry.width() * FRAME_PADDING;
+    var hh = ww * FRAME_ASPECT;
+    var tt = hh;
+    var aa = ((ww + tt + ICON_BORDER/2) - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
+    var offset_w = Math.max(0, (this._geometry.width()-ww-tt)/2);
+    var offset_h = Math.max(0, (this._geometry.height()-hh-aa)/2);
+
+    this._background_r = new Rect(offset_w, offset_h, ww, hh);
+    this._icon_r = new Rect(this._background_r.x() + ICON_BORDER*0.5, this._background_r.y() + ICON_BORDER*0.5, this._background_r.width() - (this._background_r.width() * HEALTH_BAR_W_ASPECT), this._background_r.width() - (this._background_r.width() * HEALTH_BAR_W_ASPECT));
+    this._stamina_r = new Rect(this._background_r.x() + this._icon_r.width() + ICON_BORDER, this._background_r.y(), this._background_r.width() * HEALTH_BAR_W_ASPECT - ICON_BORDER, this._background_r.height() * HEALTH_BAR_H_ASPECT);
+    this._power_r = new Rect(this._stamina_r.left(), this._stamina_r.bottom() + ICON_BORDER/2, this._stamina_r.width(), this._icon_r.height() - this._stamina_r.height());
+    this._cast_r = new Rect(this._background_r.left(), this._icon_r.bottom(), this._background_r.width(), this._background_r.height() - this._icon_r.height() - ICON_BORDER/2);
+    this._trinket_r = new Rect(this._background_r.top_right().x() + ICON_BORDER/2, this._background_r.top_right().y(), this._background_r.height(), this._background_r.height());
 
     // icon image
     this._icon_image = new Image();
@@ -571,7 +629,7 @@ function Frame(data, parent){
     this._combat_text = new Buffer(MAX_BUFFER_SIZE);
 
     // trinket
-    this._trinket = new Trinket();
+    this._trinket = new Trinket(this._trinket_r);
 
     // cast bar
     this._cast = null;
@@ -653,7 +711,7 @@ Frame.prototype = {
             if(parseInt(post[3], 10) == this.id()){
                 var s = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical = parseInt(post[5], 10);
-                this._combat_text.push(new CombatText(s, critical, 1));
+                this._combat_text.push(new CombatText(s, critical, 1, this._background_r.top_right(), this));
             }
         }
         // healing
@@ -662,13 +720,13 @@ Frame.prototype = {
             if(parseInt(post[3], 10) == this.id()){
                 var s0 = post[4] + '(' + NAMES_TABLE[post[2]] + ')';
                 var critical0 = parseInt(post[5], 10);
-                this._combat_text.push(new CombatText(s0, critical0, 2));
+                this._combat_text.push(new CombatText(s0, critical0, 2, this._background_r.top_right(), this));
             }
         }
         // cast start
         else if(event_ == 9){
             if(parseInt(post[2], 10) == this.id()){
-                this._cast = new Cast(parseInt(post[4], 10), parseInt(post[5], 10));
+                this._cast = new Cast(parseInt(post[4], 10), parseInt(post[5], 10), this._cast_r);
             }
         }
         // spell success
@@ -698,7 +756,7 @@ Frame.prototype = {
                 var type = parseInt(post[4], 10);
                 var duration0 = parseFloat(post[5]);
                 if (duration0 > 0 && CC_TABLE.hasOwnProperty(spell_id0)){
-                    this._control.push(new CrowdControl(spell_id0, duration0, type, CC_TABLE[spell_id0]));
+                    this._control.push(new CrowdControl(spell_id0, duration0, type, CC_TABLE[spell_id0], this._icon_r, this));
                 }
                 else{
                     this._auras.push(new Aura(spell_id0, duration0, type, this));
@@ -744,62 +802,47 @@ Frame.prototype = {
         context.save();
         context.translate(this._geometry.x(), this._geometry.y());
 
-        // calculate rectangles
-        var ww = this._geometry.width() * FRAME_PADDING;
-        var hh = ww * FRAME_ASPECT;
-        var tt = hh;
-        var aa = ((ww + tt + ICON_BORDER/2) - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
-        var offset_w = Math.max(0, (this._geometry.width()-ww-tt)/2);
-        var offset_h = Math.max(0, (this._geometry.height()-hh-aa)/2);
-
-        var background_r = new Rect(offset_w, offset_h, ww, hh);
-        var icon_r = new Rect(background_r.x() + ICON_BORDER*0.5, background_r.y() + ICON_BORDER*0.5, background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT), background_r.width() - (background_r.width() * HEALTH_BAR_W_ASPECT));
-        var stamina_r = new Rect(background_r.x() + icon_r.width() + ICON_BORDER, background_r.y(), background_r.width() * HEALTH_BAR_W_ASPECT - ICON_BORDER, background_r.height() * HEALTH_BAR_H_ASPECT);
-        var power_r = new Rect(stamina_r.left(), stamina_r.bottom() + ICON_BORDER/2, stamina_r.width(), icon_r.height() - stamina_r.height());
-        var cast_r = new Rect(background_r.left(), icon_r.bottom(), background_r.width(), background_r.height() - icon_r.height() - ICON_BORDER/2);
-
         // update stamina_bar
-        var stamina_bar = jQuery.extend(true, {}, stamina_r);
+        var stamina_bar = jQuery.extend(true, {}, this._stamina_r);
         stamina_bar.set_width(stamina_bar.width() * (this._stamina / this._maxstamina));
 
         // update power_bar
-        var power_bar = jQuery.extend(true, {}, power_r);
+        var power_bar = jQuery.extend(true, {}, this._power_r);
         power_bar.set_width(power_bar.width() * (this._power / 100));
 
         // draw background
         context.fillStyle = 'rgba(125, 125, 125, 0.5)';
-        context.fillRect(background_r.x(), background_r.y(), background_r.width(), background_r.height());
+        context.fillRect(this._background_r.x(), this._background_r.y(), this._background_r.width(), this._background_r.height());
 
         // draw icon
-        context.drawImage(this._icon_image, icon_r.x(), icon_r.y(), icon_r.width(), icon_r.height());
+        context.drawImage(this._icon_image, this._icon_r.x(), this._icon_r.y(), this._icon_r.width(), this._icon_r.height());
 
         // draw stamina_r
         context.fillStyle = CLASS_MAP[this._data['class']][0];
         context.fillRect(stamina_bar.x(), stamina_bar.y(), stamina_bar.width(), stamina_bar.height());
         context.globalAlpha = 0.5;
-        context.drawImage(this._bar_image, stamina_r.x(), stamina_r.y(), stamina_r.width(), stamina_r.height());
+        context.drawImage(this._bar_image, this._stamina_r.x(), this._stamina_r.y(), this._stamina_r.width(), this._stamina_r.height());
         context.globalAlpha = 1.0;
 
         // draw power
         context.fillStyle = POWER_TYPE[CLASS_MAP[this._data['class']][3]][1];
         context.fillRect(power_bar.x(), power_bar.y(), power_bar.width(), power_bar.height());
         context.globalAlpha = 0.5;
-        context.drawImage(this._bar_image, power_r.x(), power_r.y(), power_r.width(), power_r.height());
+        context.drawImage(this._bar_image, this._power_r.x(), this._power_r.y(), this._power_r.width(), this._power_r.height());
         context.globalAlpha = 1.0;
 
         // draw cast bar
         if (this._cast !== null){
-            this._cast.set_geometry(cast_r);
             this._cast.update(delta);
             this._cast.draw(context);
         }
         context.globalAlpha = 0.5;
-        context.drawImage(this._bar_image, cast_r.x(), cast_r.y(), cast_r.width(), cast_r.height());
+        context.drawImage(this._bar_image, this._cast_r.x(), this._cast_r.y(), this._cast_r.width(), this._cast_r.height());
         context.globalAlpha = 1.0;
 
 
         // init font
-        var font_h = Math.round(stamina_r.height()/2);
+        var font_h = Math.round(this._stamina_r.height()/2);
         context.font = font_h + 'px Arial';
         context.textAlign = 'left';
         context.textBaseline = 'hanging';
@@ -810,49 +853,58 @@ Frame.prototype = {
         context.shadowOffsetY = font_h*0.1;
 
         // draw trinket
-        this._trinket.set_geometry( new Rect(background_r.top_right().x() + ICON_BORDER/2, background_r.top_right().y(), background_r.height(), background_r.height()));
         this._trinket.update(delta);
         this._trinket.draw(context);
 
         // draw name text
-        var font_offset = (stamina_r.height() - font_h)/2;
-        context.fillText(this._name, stamina_r.left() + font_offset, stamina_r.top() + font_offset);
+        var font_offset = (this._stamina_r.height() - font_h)/2;
+        context.fillText(this._name, this._stamina_r.left() + font_offset, this._stamina_r.top() + font_offset);
 
         // draw hpoints text
-        context.fillText(this._stamina, stamina_r.right() - context.measureText(this._data.starthpmax).width - font_offset, stamina_r.top() + font_offset);
+        context.fillText(this._stamina, this._stamina_r.right() - context.measureText(this._data.starthpmax).width - font_offset, this._stamina_r.top() + font_offset);
 
         // draw cc
         this._control.sort(function(a,b){return b.priority() - a.priority();});
         for (var i = 0; i < this._control.length; i++){
             if (this._control[i].alive()){
-                this._control[i].set_geometry(icon_r);
                 this._control[i].update(delta);
                 this._control[i].draw(context);
             }
         }
 
         // draw race class
-        font_h = Math.round(power_r.height()/2);
+        font_h = Math.round(this._power_r.height()/2);
         context.font = font_h + 'px Arial';
-        context.fillText(this._data.race + ' ' + this._data.spec + ' ' + CLASS_MAP[this._data['class']][2], power_r.left() + font_offset, power_r.top() + (power_r.height() - font_h)*0.5);
+        context.fillText(this._data.race + ' ' + this._data.spec + ' ' + CLASS_MAP[this._data['class']][2], this._power_r.left() + font_offset, this._power_r.top() + (this._power_r.height() - font_h)*0.5);
 
         // draw power value
-        font_offset = (power_r.height() - font_h)/2;
-        context.fillText(this._power, power_r.right() - context.measureText('100').width - font_offset, power_r.top() + font_offset);
+        font_offset = (this._power_r.height() - font_h)/2;
+        context.fillText(this._power, this._power_r.right() - context.measureText('100').width - font_offset, this._power_r.top() + font_offset);
 
 
         // draw combat text
+        var prev_text = null;
         this._combat_text.map(function (text){
             if (text.alive()){
-                text.set_position(background_r.top_right());
-                text.set_font_size(font_h);
-                text.update(delta);
-                text.draw(context);
+                if (prev_text !== null && prev_text.distance_y() < text.font()){
+                    /*pass*/
+                    if (GROUP_COMBAT_TEXT){
+                        if (prev_text.type() == text.type()){
+                            prev_text.add(text);
+                            text.kill();
+                        }
+                    }
+                }
+                else{
+                    text.update(delta);
+                    text.draw(context);
+                    prev_text = text;
+                }
             }
-        });
+        }.bind(this));
 
         // draw auras
-        var frame_width = background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2;
+        var frame_width = this._background_r.width() + this._trinket.geometry().width() + ICON_BORDER/2;
         var aura_w = (frame_width - (ICON_BORDER * 0.5 * (MAX_AURA_NUMBER-1))) / MAX_AURA_NUMBER;
         var offset_x = 0;
         var offset_y = 0;
@@ -865,13 +917,13 @@ Frame.prototype = {
                 // tooltip
                 if (aura.world_geometry().contains(MOUSE_X, MOUSE_Y)){
                     has_tooltip = true;
-                    this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), background_r.width(), background_r.width()), SPELLS_TABLE[aura.id()], font_h, this);
+                    this._tooltip = new Tooltip(new Rect(aura.geometry().bottom_left().x(), aura.geometry().bottom_left().y(), this._background_r.width(), this._background_r.width()), SPELLS_TABLE[aura.id()], font_h, this);
                 }
                 if (offset_x > frame_width){
                     offset_x = 0;
                     offset_y = aura_w + ICON_BORDER/2;
                 }
-                aura.set_geometry(new Rect(background_r.bottom_left().x() + offset_x, background_r.bottom_left().y() + ICON_BORDER/2 + offset_y, aura_w, aura_w));
+                aura.set_geometry(new Rect(this._background_r.bottom_left().x() + offset_x, this._background_r.bottom_left().y() + ICON_BORDER/2 + offset_y, aura_w, aura_w));
                 aura.update(delta);
                 aura.draw(context);
                 offset_x += aura_w + ICON_BORDER/2;
@@ -1253,8 +1305,8 @@ Player.prototype = {
                     ymax = ymin + h_step;
 
                     // init each frame
-                    var d_frame = new Frame(dude, this);
-                    d_frame.set_geometry(xmin, ymin, xmax - xmin, ymax - ymin);
+                    var frame_geometry = new Rect(xmin, ymin, xmax - xmin, ymax - ymin);
+                    var d_frame = new Frame(dude, frame_geometry, this);
                     this._frames.push(d_frame);
                 }
                 index++;
@@ -1310,7 +1362,6 @@ Player.prototype = {
     _keyboard : function(){
         // keys
         $(this._canvas).on('keydown', function(event){
-			console.log(event.keyCode);
             if (event.keyCode == 32){ // space
 				this.pause();
             }
@@ -1340,6 +1391,9 @@ Player.prototype = {
             }
             else if (event.keyCode == 83){ // s
                 $("#player").toggleClass("flipped");
+            }
+            else if (event.keyCode == 71){ // g
+                GROUP_COMBAT_TEXT = !GROUP_COMBAT_TEXT;
             }
         }.bind(this));
 

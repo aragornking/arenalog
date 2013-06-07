@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <title>
-      {% block title %}{% endblock %}
+        {% block title %}{% endblock %}
     </title>
     <link rel="stylesheet" href="css/base.css">
     <link rel="stylesheet" href="css/bootstrap.min.css">
@@ -59,16 +59,12 @@
       {% block content %}{% endblock %}
 
       <footer>
-        <p>
-          &copy; Dobri Georgiev 2013
-        </p>
+        <p>&copy; Dobri Georgiev 2013</p>
       </footer>
     </div> <!-- /container -->
     
-    <script src="js/jquery-2.0.0.min.js">
-    </script>
-    <script src="js/bootstrap.min.js">
-    </script>
+    <script src="js/jquery-2.0.0.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>
